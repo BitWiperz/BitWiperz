@@ -1,0 +1,28 @@
+.icon-button {
+  width: 64px;
+  height: 64px;
+  border: none;
+  border-radius: 8px;
+  background-color: #f0f0f0;
+  color: #222222;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.icon-button svg {
+  width: 32px;
+  height: 32px;
+}
+
+.icon-button:hover {
+  background-color: #e0e0e0;
+  color: #a07fbf;
+}
+
+.icon-button:active {
+  background-color: #d0d0d0;
+}

@@ -5,3 +5,5 @@ desktop/src-tauri/target/
 desktop/node_modules/
 backend/node_modules/
 .DS_Store
+.vscode
+FIGMA_INTEGRATION.md

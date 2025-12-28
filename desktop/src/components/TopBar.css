@@ -1,0 +1,35 @@
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 30px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #e0e0e0;
+  gap: 20px;
+}
+
+.top-bar-left {
+  flex: 1;
+}
+
+.top-bar-title {
+  font-family: 'Inter', sans-serif;
+  font-size: 36px;
+  font-weight: 800;
+  color: #222222;
+  margin: 0 0 10px 0;
+}
+
+.top-bar-subtitle {
+  font-family: 'Open Sans', sans-serif;
+  font-size: 16px;
+  color: #666666;
+  margin: 0;
+}
+
+.top-bar-icons {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-shrink: 0;
+}
