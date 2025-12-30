@@ -17,34 +17,42 @@ const buildCertificateNumber = (issuedAtIso: string, driveId: string): string =>
   return `CERT-${dateStamp}-${driveSuffix}`;
 };
 
-const toCertificate = (row: CertificateEntity): Certificate => ({
-  certificateId: row.certificateId,
-  certificateNumber: row.certificateNumber,
-  issuedAt: row.issuedAt.toISOString(),
-  signature: row.signature,
-  driveId: row.driveId,
-  serialNumber: row.serialNumber ?? undefined,
-  model: row.model ?? undefined,
-  capacityBytes: row.capacityBytes ?? undefined,
-  firmwareVersion: row.firmwareVersion ?? undefined,
-  location: row.location ?? undefined,
-  erasureMethod: row.erasureMethod,
-  startedAt: row.startedAt.toISOString(),
-  completedAt: row.completedAt.toISOString(),
-  operator: {
-    id: row.operatorId ?? undefined,
-    name: row.operatorName,
-    organization: row.operatorOrganization ?? undefined,
-  },
-  verification: row.verificationHash || row.verificationTool || row.verificationNotes
-    ? {
-        hash: row.verificationHash ?? undefined,
-        tool: row.verificationTool ?? undefined,
-        notes: row.verificationNotes ?? undefined,
-      }
-    : undefined,
-  notes: row.notes ?? undefined,
-});
+const toCertificate = (row: CertificateEntity): Certificate => {
+  const cert: any = {
+    certificateId: row.certificateId,
+    certificateNumber: row.certificateNumber,
+    issuedAt: row.issuedAt.toISOString(),
+    signature: row.signature,
+    driveId: row.driveId,
+    erasureMethod: row.erasureMethod,
+    startedAt: row.startedAt.toISOString(),
+    completedAt: row.completedAt.toISOString(),
+    operator: {
+      name: row.operatorName,
+    },
+  };
+  if (row.serialNumber != null) cert.serialNumber = String((row as any).serialNumber);
+  if (row.model != null) cert.model = String((row as any).model);
+  if ((row as any).capacityBytes != null) {
+    const v: unknown = (row as any).capacityBytes;
+    const n = typeof v === 'string' ? Number(v) : (v as number);
+    if (Number.isFinite(n)) cert.capacityBytes = n as number;
+  }
+  if (row.firmwareVersion != null) cert.firmwareVersion = String((row as any).firmwareVersion);
+  if (row.location != null) cert.location = String((row as any).location);
+  if (row.operatorId != null) cert.operator.id = String((row as any).operatorId);
+  if (row.operatorOrganization != null) cert.operator.organization = String((row as any).operatorOrganization);
+  const hasVer = (row as any).verificationHash != null || (row as any).verificationTool != null || (row as any).verificationNotes != null;
+  if (hasVer) {
+    const v: any = {};
+    if ((row as any).verificationHash != null) v.hash = String((row as any).verificationHash);
+    if ((row as any).verificationTool != null) v.tool = String((row as any).verificationTool);
+    if ((row as any).verificationNotes != null) v.notes = String((row as any).verificationNotes);
+    cert.verification = v;
+  }
+  if (row.notes != null) cert.notes = String((row as any).notes);
+  return cert as Certificate;
+};
 
 export const createCertificate = async (metadata: ErasureMetadata): Promise<Certificate> => {
   const issuedAt = new Date();

@@ -143,8 +143,8 @@ CertificateEntity.init(
       allowNull: true,
       defaultValue: null,
     },
-    createdAt: '',
-    updatedAt: ''
+    createdAt: { type: DataTypes.DATE, allowNull: false },
+    updatedAt: { type: DataTypes.DATE, allowNull: false }
   },
   {
     sequelize,

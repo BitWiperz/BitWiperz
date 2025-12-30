@@ -35,7 +35,8 @@ export const postLogin = async (req: Request, res: Response) => {
     }
     // eslint-disable-next-line no-console
     console.error('Login failed', error);
-    return res.status(500).json({ error: 'Login failed' });
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return res.status(500).json({ error: 'Login failed', details: message });
   }
 };
 
