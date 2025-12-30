@@ -1,0 +1,4 @@
+# Ignore local environment and database files
+.env
+data/*.sqlite
+data/*.db
