@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 
 import type { ErasureMetadata } from '../models/certificate.js';
-import { createCertificate, getCertificate, generateCertificatePdf } from '../services/certificateService.js';
+import { createCertificate, getCertificate, listCertificates, generateCertificatePdf } from '../services/certificateService.js';
 
 const REQUIRED_FIELDS: Array<keyof ErasureMetadata> = [
   'driveId',
@@ -91,5 +91,22 @@ export const downloadCertificatePdf = async (req: Request, res: Response) => {
     // eslint-disable-next-line no-console
     console.error('Failed to generate certificate PDF', error);
     return res.status(500).json({ error: 'Failed to generate certificate PDF' });
+  }
+};
+
+export const fetchCertificates = async (req: Request, res: Response) => {
+  const limitQ = req.query.limit ? Number(req.query.limit) : undefined;
+  const offsetQ = req.query.offset ? Number(req.query.offset) : undefined;
+  try {
+    const opts: { limit?: number; offset?: number } = {};
+    if (typeof limitQ === 'number' && Number.isFinite(limitQ)) opts.limit = limitQ;
+    if (typeof offsetQ === 'number' && Number.isFinite(offsetQ)) opts.offset = offsetQ;
+    const certificates = await listCertificates(opts);
+    return res.json({ certificates });
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to list certificates', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return res.status(500).json({ error: 'Failed to list certificates', details: message });
   }
 };

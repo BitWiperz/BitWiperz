@@ -104,6 +104,17 @@ export const getCertificate = async (certificateId: string): Promise<Certificate
   return row ? toCertificate(row) : undefined;
 };
 
+export const listCertificates = async (opts: { limit?: number; offset?: number } = {}): Promise<Certificate[]> => {
+  const limit = opts.limit ?? 50;
+  const offset = opts.offset ?? 0;
+  const rows = await CertificateEntity.findAll({
+    order: [['issuedAt', 'DESC']],
+    limit,
+    offset,
+  });
+  return rows.map(toCertificate);
+};
+
 export const generateCertificatePdf = async (certificate: Certificate): Promise<Buffer> => {
   const COMPANY = process.env.CERT_COMPANY_NAME ?? 'BitWiperz';
   const LOGO_PATH = process.env.CERT_LOGO_PATH;
