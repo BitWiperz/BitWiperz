@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'crypto';
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, degrees } from 'pdf-lib';
 
 import type { Certificate, ErasureMetadata } from '../models/certificate.js';
 import { CertificateEntity } from '../models/certificateEntity.js';
@@ -97,60 +97,140 @@ export const getCertificate = async (certificateId: string): Promise<Certificate
 };
 
 export const generateCertificatePdf = async (certificate: Certificate): Promise<Buffer> => {
+  const COMPANY = process.env.CERT_COMPANY_NAME ?? 'BitWiperz';
+  const LOGO_PATH = process.env.CERT_LOGO_PATH;
+
   const doc = await PDFDocument.create();
-  const page = doc.addPage([612, 792]); // Letter size
-  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const page = doc.addPage([612, 792]); // US Letter
+  const helv = await doc.embedFont(StandardFonts.Helvetica);
+  const helvBold = await doc.embedFont(StandardFonts.HelveticaBold);
 
-  const draw = (text: string, x: number, y: number, size = 12) => {
-    page.drawText(text, { x, y, size, font, color: rgb(0, 0, 0) });
-  };
+  const margin = 50;
+  const width = page.getSize().width;
+  const height = page.getSize().height;
 
-  // Header
-  draw('Data Erasure Certificate', 180, 740, 18);
-
-  // Basic info
-  let y = 700;
-  const step = 20;
-  const lines = [
-    `Certificate Number: ${certificate.certificateNumber}`,
-    `Certificate ID: ${certificate.certificateId}`,
-    `Issued At: ${certificate.issuedAt}`,
-    `Signature (SHA-256): ${certificate.signature.slice(0, 16)}...`,
-    `Drive ID: ${certificate.driveId}`,
-    `Model: ${certificate.model ?? 'N/A'}`,
-    `Serial: ${certificate.serialNumber ?? 'N/A'}`,
-    `Capacity (bytes): ${certificate.capacityBytes ?? 'N/A'}`,
-    `Firmware: ${certificate.firmwareVersion ?? 'N/A'}`,
-    `Location: ${certificate.location ?? 'N/A'}`,
-    `Erasure Method: ${certificate.erasureMethod}`,
-    `Started At: ${certificate.startedAt}`,
-    `Completed At: ${certificate.completedAt}`,
-    `Operator: ${certificate.operator.name}${certificate.operator.organization ? ' (' + certificate.operator.organization + ')' : ''}`,
-  ];
-  lines.forEach((line) => {
-    draw(line, 50, y);
-    y -= step;
-  });
-
-  if (certificate.verification) {
-    draw('Verification:', 50, y);
-    y -= step;
-    draw(`Hash: ${certificate.verification.hash ?? 'N/A'}`, 70, y);
-    y -= step;
-    draw(`Tool: ${certificate.verification.tool ?? 'N/A'}`, 70, y);
-    y -= step;
-    if (certificate.verification.notes) {
-      draw(`Notes: ${certificate.verification.notes}`, 70, y);
-      y -= step;
+  // Optional logo
+  if (LOGO_PATH) {
+    try {
+      const fs = await import('fs');
+      const imgBytes = await fs.promises.readFile(LOGO_PATH);
+      let img;
+      if (LOGO_PATH.toLowerCase().endsWith('.png')) {
+        img = await doc.embedPng(imgBytes);
+      } else {
+        img = await doc.embedJpg(imgBytes);
+      }
+      const imgW = 120;
+      const scale = imgW / img.width;
+      const imgH = img.height * scale;
+      page.drawImage(img, { x: margin, y: height - margin - imgH, width: imgW, height: imgH });
+    } catch {
+      // ignore logo errors
     }
   }
 
-  if (certificate.notes) {
-    draw('Notes:', 50, y);
-    y -= step;
-    draw(certificate.notes, 70, y);
-    y -= step;
+  // Header bar
+  page.drawRectangle({ x: margin, y: height - margin - 30, width: width - margin * 2, height: 30, color: rgb(0.15, 0.15, 0.18) });
+  page.drawText('Data Erasure Certificate', {
+    x: margin + 12,
+    y: height - margin - 22,
+    size: 16,
+    font: helvBold,
+    color: rgb(1, 1, 1),
+  });
+  page.drawText(COMPANY, {
+    x: width - margin - helvBold.widthOfTextAtSize(COMPANY, 12),
+    y: height - margin - 20,
+    size: 12,
+    font: helvBold,
+    color: rgb(1, 1, 1),
+  });
+
+  // Watermark certificate number (subtle)
+  page.drawText(certificate.certificateNumber, {
+    x: width / 2 - 120,
+    y: height / 2 + 220,
+    size: 48,
+    font: helvBold,
+    color: rgb(0.92, 0.92, 0.95),
+    rotate: degrees(0),
+    opacity: 0.25,
+  });
+
+  // Section helper
+  let y = height - margin - 60;
+  const lineGap = 18;
+  const labelColor = rgb(0.3, 0.3, 0.35);
+  const valueColor = rgb(0, 0, 0);
+
+  const section = (title: string) => {
+    page.drawText(title, { x: margin, y, size: 13, font: helvBold, color: valueColor });
+    y -= lineGap;
+    page.drawLine({ start: { x: margin, y }, end: { x: width - margin, y }, thickness: 1, color: rgb(0.85, 0.85, 0.88) });
+    y -= 8;
+  };
+
+  const field = (label: string, value: string) => {
+    page.drawText(label + ':', { x: margin, y, size: 11, font: helv, color: labelColor });
+    page.drawText(value, { x: margin + 160, y, size: 11, font: helvBold, color: valueColor });
+    y -= lineGap;
+  };
+
+  // Certificate Info
+  section('Certificate');
+  field('Number', certificate.certificateNumber);
+  field('ID', certificate.certificateId);
+  field('Issued At', certificate.issuedAt);
+  field('Signature (SHA-256)', certificate.signature);
+
+  // Device Info
+  section('Device');
+  field('Drive ID', certificate.driveId);
+  field('Model', certificate.model ?? 'N/A');
+  field('Serial', certificate.serialNumber ?? 'N/A');
+  field('Capacity (bytes)', String(certificate.capacityBytes ?? 'N/A'));
+  field('Firmware', certificate.firmwareVersion ?? 'N/A');
+  field('Location', certificate.location ?? 'N/A');
+
+  // Erasure Info
+  section('Erasure');
+  field('Method', certificate.erasureMethod);
+  field('Started At', certificate.startedAt);
+  field('Completed At', certificate.completedAt);
+
+  // Operator & Verification
+  section('Operator');
+  const opName = certificate.operator.name + (certificate.operator.organization ? ` (${certificate.operator.organization})` : '');
+  field('Name', opName);
+  if (certificate.verification) {
+    section('Verification');
+    field('Hash', certificate.verification.hash ?? 'N/A');
+    field('Tool', certificate.verification.tool ?? 'N/A');
+    if (certificate.verification.notes) {
+      page.drawText('Notes:', { x: margin, y, size: 11, font: helv, color: labelColor });
+      y -= lineGap;
+      const wrap = (text: string, max = 80) => text.match(new RegExp(`.{1,${max}}`, 'g')) ?? [text];
+      wrap(certificate.verification.notes, 90).forEach((ln) => {
+        page.drawText(ln, { x: margin + 20, y, size: 11, font: helv, color: valueColor });
+        y -= lineGap;
+      });
+    }
   }
+
+  // General notes
+  if (certificate.notes) {
+    section('Notes');
+    const wrap = (text: string, max = 90) => text.match(new RegExp(`.{1,${max}}`, 'g')) ?? [text];
+    wrap(certificate.notes, 100).forEach((ln) => {
+      page.drawText(ln, { x: margin, y, size: 11, font: helv, color: valueColor });
+      y -= lineGap;
+    });
+  }
+
+  // Footer
+  const footer = 'Generated by BitWiperz • This certificate attests to data erasure completed on the device listed above.';
+  page.drawLine({ start: { x: margin, y: margin + 30 }, end: { x: width - margin, y: margin + 30 }, thickness: 1, color: rgb(0.85, 0.85, 0.88) });
+  page.drawText(footer, { x: margin, y: margin + 12, size: 10, font: helv, color: labelColor });
 
   const bytes = await doc.save();
   return Buffer.from(bytes);
