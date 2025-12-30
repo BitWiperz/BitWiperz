@@ -6,12 +6,15 @@ import { User } from '../models/user.js';
 type RegisterInput = { email: string; password: string; name?: string };
 type LoginInput = { email: string; password: string };
 
-const _JWT_SECRET = process.env.JWT_SECRET ?? '';
-if (!_JWT_SECRET) {
-  throw new Error('JWT_SECRET is required but not set. Please set a strong, random secret in your environment.');
-}
-const JWT_SECRET: jwt.Secret = _JWT_SECRET;
 const JWT_EXPIRES_IN: string | number = (process.env.JWT_EXPIRES_IN ?? '7d') as string | number;
+
+function getJwtSecret(): jwt.Secret {
+  const s = process.env.JWT_SECRET;
+  if (!s) {
+    throw new Error('JWT_SECRET is required but not set. Please set a strong, random secret in your environment.');
+  }
+  return s as jwt.Secret;
+}
 
 type PublicUser = { id: number; email: string; name: string | null; createdAt: Date; updatedAt: Date };
 
@@ -50,10 +53,10 @@ export const login = async ({ email, password }: LoginInput): Promise<{ token: s
   let token: string;
   try {
     const options: jwt.SignOptions = { expiresIn: JWT_EXPIRES_IN as any };
-    token = jwt.sign({ sub: String(user.id), email: user.email }, JWT_SECRET, options);
+    token = jwt.sign({ sub: String(user.id), email: user.email }, getJwtSecret(), options);
   } catch (err) {
     // Fallback without expiresIn if environment value causes issues
-    token = jwt.sign({ sub: String(user.id), email: user.email }, JWT_SECRET);
+    token = jwt.sign({ sub: String(user.id), email: user.email }, getJwtSecret());
   }
 
   return { token, user: sanitizeUser(user) };
@@ -61,7 +64,7 @@ export const login = async ({ email, password }: LoginInput): Promise<{ token: s
 
 export const verifyToken = (token: string) => {
   try {
-    return jwt.verify(token, JWT_SECRET) as { sub: string; email: string; iat: number; exp: number };
+    return jwt.verify(token, getJwtSecret()) as { sub: string; email: string; iat: number; exp: number };
   } catch {
     return null;
   }
