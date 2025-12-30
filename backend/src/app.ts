@@ -4,8 +4,6 @@ import express from 'express';
 import type { Application } from 'express';
 
 import certificateRoutes from './routes/certificateRoutes.js';
-import driveRoutes from './routes/driveRoutes.js';
-import authRoutes from './routes/authRoutes.js';
 
 const app: Application = express();
 
@@ -15,8 +13,6 @@ app.use(express.json({ limit: '1mb' }));
 
 // Routes
 app.use('/api', certificateRoutes);
-app.use('/api', driveRoutes);
-app.use('/api', authRoutes);
 app.get('/health', (_req, res) => {
 	res.json({ status: 'ok' });
 });

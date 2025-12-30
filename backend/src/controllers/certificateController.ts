@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 
 import type { ErasureMetadata } from '../models/certificate.js';
-import { createCertificate, getCertificate } from '../services/certificateService.js';
+import { createCertificate, getCertificate, generateCertificatePdf } from '../services/certificateService.js';
 
 const REQUIRED_FIELDS: Array<keyof ErasureMetadata> = [
   'driveId',
@@ -32,7 +32,7 @@ const validatePayload = (payload: Partial<ErasureMetadata>): string[] => {
   return [...new Set(missing)];
 };
 
-export const issueCertificate = (req: Request, res: Response) => {
+export const issueCertificate = async (req: Request, res: Response) => {
   const payload = req.body as ErasureMetadata;
   const missing = validatePayload(payload);
 
@@ -44,27 +44,52 @@ export const issueCertificate = (req: Request, res: Response) => {
   }
 
   try {
-    const certificate = createCertificate(payload);
+    const certificate = await createCertificate(payload);
     return res.status(201).json({ certificate });
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('Failed to issue certificate', error);
-    return res.status(500).json({ error: 'Failed to issue certificate' });
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return res.status(500).json({ error: 'Failed to issue certificate', details: message });
   }
 };
 
-export const fetchCertificate = (req: Request, res: Response) => {
+export const fetchCertificate = async (req: Request, res: Response) => {
   const certificateId = req.params.certificateId;
 
   if (!certificateId) {
     return res.status(400).json({ error: 'certificateId is required' });
   }
 
-  const certificate = getCertificate(certificateId);
+  const certificate = await getCertificate(certificateId);
 
   if (!certificate) {
     return res.status(404).json({ error: 'Certificate not found' });
   }
 
   return res.json({ certificate });
+};
+
+export const downloadCertificatePdf = async (req: Request, res: Response) => {
+  const certificateId = req.params.certificateId;
+  if (!certificateId) {
+    return res.status(400).json({ error: 'certificateId is required' });
+  }
+
+  const certificate = await getCertificate(certificateId);
+  if (!certificate) {
+    return res.status(404).json({ error: 'Certificate not found' });
+  }
+
+  try {
+    const pdf = await generateCertificatePdf(certificate);
+    res.setHeader('Content-Type', 'application/pdf');
+    const filename = `${certificate.certificateNumber}.pdf`;
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.status(200).send(pdf);
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to generate certificate PDF', error);
+    return res.status(500).json({ error: 'Failed to generate certificate PDF' });
+  }
 };

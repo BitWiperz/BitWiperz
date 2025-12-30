@@ -25,6 +25,8 @@ export const initDb = async () => {
   });
 
   // Models should call their own init when imported
+  await import('../models/user.js');
+  await import('../models/certificateEntity.js');
   await sequelize.authenticate();
   await sequelize.sync();
 };
