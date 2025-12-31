@@ -1,0 +1,77 @@
+.dev-card {
+  background-color: #f5f5f5;
+  border: 2px solid transparent;
+  border-radius: 15px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.dev-card:hover {
+  background-color: #eeeeee;
+  border-color: #a07fbf;
+}
+
+.dev-card.selected {
+  background-color: #e8dff3;
+  border-color: #a07fbf;
+}
+
+.dev-card-content {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 20px;
+}
+
+.dev-card-icon {
+  flex-shrink: 0;
+  width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-placeholder {
+  width: 40px;
+  height: 40px;
+  background-color: #d9d9d9;
+  border-radius: 8px;
+}
+
+.dev-card-info {
+  flex: 1;
+}
+
+.dev-card-name {
+  font-family: 'Open Sans', sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  color: #222222;
+  margin: 0 0 5px 0;
+}
+
+.dev-card-specs {
+  font-family: 'Open Sans', sans-serif;
+  font-weight: 400;
+  font-size: 14px;
+  color: #878787;
+  margin: 0;
+}
+
+.dev-card-selector {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dev-card-selector input[type="checkbox"] {
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  accent-color: #a07fbf;
+}
