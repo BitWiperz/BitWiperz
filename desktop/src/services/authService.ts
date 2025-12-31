@@ -30,7 +30,7 @@ async function apiFetch(path: string, options: RequestInit = {}, includeAuth: bo
 }
 
 export interface User {
-  id: number;
+  id: string;
   email: string;
   name: string | null;
   createdAt: string;
@@ -54,6 +54,13 @@ export interface LoginData {
 }
 
 export const authService = {
+  clearAuthOnStartup(): void {
+    try {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user');
+      console.log('[auth] Cleared auth on startup');
+    } catch {}
+  },
   async register(data: RegisterData): Promise<User> {
     try {
       const url = `/auth/register`;

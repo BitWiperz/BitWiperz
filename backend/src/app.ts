@@ -16,7 +16,6 @@ app.use(express.json({ limit: '1mb' }));
 // Routes
 app.use('/api', authRoutes);
 app.use('/api', certificateRoutes);
-app.use('/api', authRoutes);
 app.get('/health', (_req, res) => {
 	res.json({ status: 'ok' });
 });
