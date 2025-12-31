@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Certificate, listCertificates, downloadCertificatePdf, USE_MOCK_DATA } from '../services/certificateService';
+import { Certificate, listCertificates, downloadCertificatePdf, previewCertificatePdf, issueAndDownloadCertificate, USE_MOCK_DATA } from '../services/certificateService';
 import './Reports.css';
 
 export default function Reports() {
@@ -10,7 +10,7 @@ export default function Reports() {
 
   useEffect(() => {
     let mounted = true;
-    (async () => {
+    const loadReports = async () => {
       setLoading(true);
       try {
         const data = await listCertificates(50, 0);
@@ -20,7 +20,8 @@ export default function Reports() {
       } finally {
         if (mounted) setLoading(false);
       }
-    })();
+    };
+    loadReports();
     return () => { mounted = false; };
   }, []);
 
@@ -39,6 +40,41 @@ export default function Reports() {
 
   const fmt = (iso?: string) => (iso ? new Date(iso).toLocaleString() : 'N/A');
 
+  const handlePreview = async (report: Certificate) => {
+    setError(null);
+    try {
+      await previewCertificatePdf(report.certificateId);
+    } catch (e: any) {
+      setError(e?.message || 'Preview failed');
+    }
+  };
+
+  const handleIssueDemo = async () => {
+    setError(null);
+    try {
+      const now = new Date();
+      const started = new Date(now.getTime() - 5 * 60 * 1000);
+      await issueAndDownloadCertificate({
+        driveId: '/dev/diskX',
+        erasureMethod: 'NIST 800-88',
+        startedAt: started.toISOString(),
+        completedAt: now.toISOString(),
+        operator: { name: 'Demo Operator', organization: 'BitWiperz' },
+        model: 'Demo SSD',
+        serialNumber: 'DEMO-0001',
+        capacityBytes: 256 * 1024 * 1024 * 1024,
+        firmwareVersion: 'v1.0',
+        location: 'Demo Lab',
+        notes: 'Issued via demo CTA from Reports page.'
+      });
+      // Refresh list so the new certificate appears
+      const refreshed = await listCertificates(50, 0);
+      setReports(refreshed);
+    } catch (e: any) {
+      setError(e?.message || 'Failed to issue demo certificate');
+    }
+  };
+
   return (
     <div className="page-container">
       <div className="page-header">
@@ -55,6 +91,14 @@ export default function Reports() {
               <div className="report-item" key={r.certificateId}>
                 <div className="report-item-header">
                   <div className="report-title">{r.certificateNumber}</div>
+                  <button
+                    className="download-button"
+                    onClick={() => handlePreview(r)}
+                    title="Preview PDF"
+                    style={{ marginRight: 8 }}
+                  >
+                    <span>Preview</span>
+                  </button>
                   <button
                     className="download-button"
                     disabled={downloading === r.certificateId}
@@ -104,6 +148,9 @@ export default function Reports() {
               <div className="report-item">
                 <div className="report-date">No reports available yet</div>
                 <p className="report-description">Wiping operations will appear here</p>
+                <button className="download-button" onClick={handleIssueDemo} title="Issue a demo certificate">
+                  Issue Demo Certificate
+                </button>
               </div>
             )}
           </div>

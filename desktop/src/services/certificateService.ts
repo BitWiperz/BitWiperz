@@ -1,7 +1,11 @@
 import { authService } from './authService';
 
-// Feature flag: set to false to use real backend data
-export const USE_MOCK_DATA = false;
+// Feature flag: set via Vite env to surface mock data without backend
+const parseBool = (v: unknown): boolean => {
+  const s = String(v ?? '').trim().toLowerCase();
+  return s === '1' || s === 'true' || s === 'yes' || s === 'on';
+};
+export const USE_MOCK_DATA = parseBool((import.meta as any).env?.VITE_USE_MOCK_CERTS);
 
 export interface OperatorInfo {
   id?: string;
@@ -169,6 +173,28 @@ export async function issueAndDownloadCertificate(metadata: ErasureMetadata): Pr
   await downloadCertificatePdf(cert.certificateId);
 }
 
+// Preview certificate PDF in a new tab/window instead of forcing download
+export async function previewCertificatePdf(certificateId: string): Promise<void> {
+  if (USE_MOCK_DATA) {
+    const content = `%PDF-1.4\n% Mock PDF for certificate ${certificateId}\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF`;
+    const blob = new Blob([content], { type: 'application/pdf' });
+    openBlobPreview(blob);
+    return;
+  }
+  const res = await authService.apiFetch(`/certificates/${certificateId}/pdf`, { method: 'GET' }, true);
+  if (!res.ok) {
+    const errText = await res.text();
+    try {
+      const err = JSON.parse(errText);
+      throw new Error(err?.error || 'Failed to preview certificate');
+    } catch {
+      throw new Error('Failed to preview certificate');
+    }
+  }
+  const blob = await res.blob();
+  openBlobPreview(blob);
+}
+
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -178,6 +204,13 @@ function triggerDownload(blob: Blob, filename: string) {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+function openBlobPreview(blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  // Open in a new tab/window; revoke later to free memory
+  window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 function cryptoRandomId(): string {

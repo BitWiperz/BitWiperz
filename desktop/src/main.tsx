@@ -3,8 +3,14 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { authService } from "./services/authService";
 
-// Clear any persisted authentication on app startup to force re-login
-authService.logout();
+// Optionally validate existing session on startup; only clear if invalid
+(async () => {
+  try {
+    await authService.validateSessionOnStartup?.();
+  } catch {
+    // ignore startup validation errors
+  }
+})();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
