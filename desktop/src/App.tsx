@@ -9,8 +9,11 @@ import "./App.css";
 let appWindow: any;
 try {
   // Lazy import to avoid bundling errors in non-tauri environments
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  appWindow = require("@tauri-apps/api/window").appWindow;
+  import("@tauri-apps/api/window").then((module) => {
+    appWindow = module.appWindow;
+  }).catch(() => {
+    // ignore if Tauri is not available
+  });
 } catch {}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {

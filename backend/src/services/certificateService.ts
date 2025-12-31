@@ -144,18 +144,31 @@ export const createCertificate = async (metadata: ErasureMetadata, userId: strin
     const pdf = await generateCertificatePdf(cert);
     const path = `${userId}/${cert.certificateNumber}.pdf`;
     const blob = new Blob([new Uint8Array(pdf)], { type: 'application/pdf' });
-    const { error: upErr } = await supabase.storage
-      .from(getBucketName())
-      .upload(path, blob, { contentType: 'application/pdf', upsert: true });
-    if (!upErr) {
-      await supabase
-        .from('certificates')
-        .update({ pdf_storage_path: path })
-        .eq('id', created.id)
-        .eq('user_id', userId);
-    } else {
+    const bucket = getBucketName();
+    const maxAttempts = 3;
+    let attempt = 0;
+    let lastErr: Error | null = null;
+    while (attempt < maxAttempts) {
+      attempt += 1;
+      const { error: upErr } = await supabase.storage
+        .from(bucket)
+        .upload(path, blob, { contentType: 'application/pdf', upsert: true });
+      if (!upErr) {
+        await supabase
+          .from('certificates')
+          .update({ pdf_storage_path: path })
+          .eq('id', created.id)
+          .eq('user_id', userId);
+        lastErr = null;
+        break;
+      } else {
+        lastErr = new Error(upErr.message);
+        await new Promise((r) => setTimeout(r, attempt * 300));
+      }
+    }
+    if (lastErr) {
       // eslint-disable-next-line no-console
-      console.error('[storage/upload] Failed', { message: upErr.message, path });
+      console.error('[storage/upload] Failed after retries', { message: lastErr.message, path });
     }
   } catch (e) {
     // eslint-disable-next-line no-console

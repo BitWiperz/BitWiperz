@@ -7,7 +7,7 @@ import { getSupabaseAdmin } from '../db/supabase.js';
 type RegisterInput = { email: string; password: string; name?: string };
 type LoginInput = { email: string; password: string };
 
-const JWT_EXPIRES_IN: string | number = (process.env.JWT_EXPIRES_IN ?? '7d') as string | number;
+const JWT_EXPIRES_IN: string | number = (process.env.JWT_EXPIRES_IN ?? '24h') as string | number;
 
 function getJwtSecret(): jwt.Secret {
   const s = process.env.JWT_SECRET;
@@ -46,7 +46,8 @@ export const register = async ({ email, password, name }: RegisterInput): Promis
     throw new Error('Email already in use');
   }
 
-  const saltRounds = 10;
+  const saltRoundsEnv = process.env.BCRYPT_ROUNDS;
+  const saltRounds = Math.max(4, Number(saltRoundsEnv ?? 12));
   const passwordHash = await bcrypt.hash(password, saltRounds);
 
   const insert = {

@@ -106,12 +106,17 @@ export const fetchCertificates = async (req: Request, res: Response) => {
   const offsetQ = req.query.offset ? Number(req.query.offset) : undefined;
   try {
     const opts: { limit?: number; offset?: number } = {};
-    if (typeof limitQ === 'number' && Number.isFinite(limitQ)) opts.limit = limitQ;
-    if (typeof offsetQ === 'number' && Number.isFinite(offsetQ)) opts.offset = offsetQ;
+    const limit = typeof limitQ === 'number' && Number.isFinite(limitQ) ? limitQ : 50;
+    const offset = typeof offsetQ === 'number' && Number.isFinite(offsetQ) ? offsetQ : 0;
+    const cappedLimit = Math.min(Math.max(1, limit), 100);
+    const safeOffset = Math.max(0, offset);
+    opts.limit = cappedLimit;
+    opts.offset = safeOffset;
     const userId = (req as any).user?.id as string | undefined;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
     const certificates = await listCertificates(opts, userId);
-    return res.json({ certificates });
+    const hasMore = certificates.length === cappedLimit; // heuristic without total count
+    return res.json({ certificates, meta: { limit: cappedLimit, offset: safeOffset, hasMore } });
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('Failed to list certificates', error);

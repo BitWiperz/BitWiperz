@@ -17,6 +17,13 @@ function validateEnv(): void {
 		console.error('Missing required environment variables:', missing.join(', '));
 		process.exit(1);
 	}
+
+  const secret = process.env.JWT_SECRET as string;
+  if (secret.length < 32) {
+    // eslint-disable-next-line no-console
+    console.error('JWT_SECRET is too short. Use a strong, random secret (>= 32 characters).');
+    process.exit(1);
+  }
 }
 
 validateEnv();
