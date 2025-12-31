@@ -1,3 +1,7 @@
 packages:
   - backend
   - desktop
+
+onlyBuiltDependencies:
+  - bcrypt
+  - esbuild
