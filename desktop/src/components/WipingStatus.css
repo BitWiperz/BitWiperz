@@ -1,0 +1,207 @@
+.wiping-status {
+  background-color: #ffffff;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 15px;
+  border-left: 4px solid #5d5d5d;
+  transition: all 0.3s ease;
+}
+
+.wiping-status.success {
+  border-left-color: #4caf50;
+  background-color: #f1f8f5;
+}
+
+.wiping-status.failed {
+  border-left-color: #f44336;
+  background-color: #fde8e6;
+}
+
+.wiping-status.cancelled {
+  border-left-color: #ff9800;
+  background-color: #fff3e0;
+}
+
+.status-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.status-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.status-title {
+  flex: 1;
+}
+
+.status-device-name {
+  font-family: 'Open Sans', sans-serif;
+  font-weight: 600;
+  font-size: 16px;
+  color: #222222;
+  margin: 0 0 4px 0;
+}
+
+.status-device-id {
+  font-family: 'Open Sans', sans-serif;
+  font-weight: 400;
+  font-size: 12px;
+  color: #999999;
+}
+
+.status-badge {
+  flex-shrink: 0;
+}
+
+.badge {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-family: 'Open Sans', sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.success-badge {
+  background-color: #c8e6c9;
+  color: #2e7d32;
+}
+
+.failed-badge {
+  background-color: #ffcdd2;
+  color: #c62828;
+}
+
+.cancelled-badge {
+  background-color: #ffe0b2;
+  color: #e65100;
+}
+
+.status-details-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.status-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.status-detail-item.full-width {
+  grid-column: 1 / -1;
+}
+
+.status-detail-label {
+  font-family: 'Open Sans', sans-serif;
+  font-weight: 600;
+  font-size: 12px;
+  color: #666666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-detail-value {
+  font-family: 'Open Sans', sans-serif;
+  font-weight: 500;
+  font-size: 14px;
+  color: #222222;
+  word-break: break-word;
+}
+
+.status-detail-value.hash {
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-size: 12px;
+  color: #666666;
+  padding: 8px;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+}
+
+.status-detail-value.error {
+  color: #c62828;
+  padding: 8px;
+  background-color: #ffcdd2;
+  border-radius: 4px;
+}
+
+.status-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.action-button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-family: 'Open Sans', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+}
+
+.action-button.primary {
+  background-color: #4caf50;
+  color: #ffffff;
+}
+
+.action-button.primary:hover:not(:disabled) {
+  background-color: #388e3c;
+}
+
+.action-button.primary:disabled {
+  background-color: #a5d6a7;
+  cursor: not-allowed;
+}
+
+.action-button.secondary {
+  background-color: #5d5d5d;
+  color: #ffffff;
+}
+
+.action-button.secondary:hover {
+  background-color: #484848;
+}
+
+@media (max-width: 768px) {
+  .status-header {
+    flex-wrap: wrap;
+  }
+
+  .status-badge {
+    flex-basis: 100%;
+  }
+
+  .status-details-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .status-detail-item.full-width {
+    grid-column: 1;
+  }
+
+  .status-actions {
+    flex-direction: column;
+  }
+
+  .action-button {
+    width: 100%;
+  }
+}

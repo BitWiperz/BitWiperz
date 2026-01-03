@@ -2,6 +2,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import React, { useEffect } from "react";
 import { Sidebar } from "./components";
 import { SelectDevices, FieldOptions, Reports, Login, Register } from "./pages";
+import Welcome from "./pages/Welcome";
+import NetworkSetup from "./pages/NetworkSetup";
 import { authService } from "./services/authService";
 import "./App.css";
 // Optional: listen for Tauri window close to clear auth
@@ -44,6 +46,8 @@ function App() {
   return (
     <Router>
       <Routes>
+        <Route path="/welcome" element={<Welcome />} />
+        <Route path="/network-setup" element={<NetworkSetup />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         
@@ -62,6 +66,8 @@ function App() {
             </div>
           </ProtectedRoute>
         } />
+        
+        <Route path="/" element={<Navigate to="/welcome" replace />} />
       </Routes>
     </Router>
   );
