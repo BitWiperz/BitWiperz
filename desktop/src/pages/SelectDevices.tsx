@@ -1,32 +1,36 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import "./SelectDevices.css";
 import DevCard from "../components/DevCard";
 import ErasureMethod from "../components/ErasureMethod";
 import TopBar from "../components/TopBar";
+import { getDevices } from "../services/deviceService";
+import { Device } from "../types/device";
 
 export default function SelectDevices() {
-  const [selectedDevices, setSelectedDevices] = useState<number[]>([]);
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [selectedDevices, setSelectedDevices] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [erasureMethod, setErasureMethod] = useState("erase");
 
-  const devices = [
-    {
-      id: 1,
-      name: "SAMSUNG/SSD",
-      specs: "SATA/SSD - 256GB - S1EVNYAFB35065",
-    },
-    {
-      id: 2,
-      name: "WESTERN DIGITAL/HDD",
-      specs: "SATA/HDD - 1TB - WD10EZEX",
-    },
-    {
-      id: 3,
-      name: "CRUCIAL/SSD",
-      specs: "NVMe/SSD - 512GB - CT512P5SSD8",
-    },
-  ];
+  useEffect(() => {
+    const loadDevices = async () => {
+      try {
+        const fetchedDevices = await getDevices();
+        setDevices(fetchedDevices);
+        setError(null);
+      } catch (err) {
+        console.error("Error loading devices:", err);
+        setError("Failed to load devices");
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const toggleDeviceSelection = (id: number) => {
+    loadDevices();
+  }, []);
+
+  const toggleDeviceSelection = (id: string) => {
     setSelectedDevices((prev) =>
       prev.includes(id) ? prev.filter((d) => d !== id) : [...prev, id]
     );
@@ -55,15 +59,22 @@ export default function SelectDevices() {
       />
       <div className="page-content">
         <div className="device-list">
-          {devices.map((device) => (
-            <DevCard
-              key={device.id}
-              name={device.name}
-              specs={device.specs}
-              selected={selectedDevices.includes(device.id)}
-              onSelect={() => toggleDeviceSelection(device.id)}
-            />
-          ))}
+          {loading && <div className="device-status">Loading devices...</div>}
+          {error && !loading && <div className="device-status error">{error}</div>}
+          {!loading && !error && devices.length === 0 && (
+            <div className="device-status">No devices detected.</div>
+          )}
+          {!loading &&
+            !error &&
+            devices.map((device) => (
+              <DevCard
+                key={device.id}
+                name={device.name}
+                specs={`${device.interface}/${device.device_type} - ${device.size_formatted}${device.serial ? ` - ${device.serial}` : ""}`}
+                selected={selectedDevices.includes(device.id)}
+                onSelect={() => toggleDeviceSelection(device.id)}
+              />
+            ))}
         </div>
         <div className="erasure-section">
           <ErasureMethod selectedOption={erasureMethod} onSelect={setErasureMethod} />
