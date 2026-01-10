@@ -1,4 +1,9 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const API_BASE_URL_RAW = import.meta.env.VITE_API_URL as string | undefined;
+if (!API_BASE_URL_RAW) {
+  console.error('[config] VITE_API_URL is not set. Please define it in your .env to point to the backend API.');
+  throw new Error('Missing VITE_API_URL environment variable');
+}
+const API_BASE_URL = API_BASE_URL_RAW;
 
 function clearAuthAndRedirect() {
   try {
@@ -30,7 +35,7 @@ async function apiFetch(path: string, options: RequestInit = {}, includeAuth: bo
 }
 
 export interface User {
-  id: number;
+  id: string;
   email: string;
   name: string | null;
   createdAt: string;
@@ -54,6 +59,13 @@ export interface LoginData {
 }
 
 export const authService = {
+  clearAuthOnStartup(): void {
+    try {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user');
+      console.log('[auth] Cleared auth on startup');
+    } catch {}
+  },
   async register(data: RegisterData): Promise<User> {
     try {
       const url = `/auth/register`;
@@ -134,6 +146,20 @@ export const authService = {
 
   isAuthenticated(): boolean {
     return !!this.getToken();
+  },
+  async validateSessionOnStartup(): Promise<boolean> {
+    const token = this.getToken();
+    if (!token) return false;
+    try {
+      const res = await apiFetch('/auth/me', { method: 'GET' }, true);
+      if (res.ok) return true;
+      // Token rejected; clear stored auth
+      await this.logout();
+      return false;
+    } catch {
+      await this.logout();
+      return false;
+    }
   },
   // Export helper for other services to use
   apiFetch,

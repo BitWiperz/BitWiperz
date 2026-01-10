@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 
 import type { ErasureMetadata } from '../models/certificate.js';
-import { createCertificate, getCertificate, generateCertificatePdf } from '../services/certificateService.js';
+import { createCertificate, getCertificate, listCertificates, generateCertificatePdf, getCertificatePdfFromStorage } from '../services/certificateService.js';
 
 const REQUIRED_FIELDS: Array<keyof ErasureMetadata> = [
   'driveId',
@@ -44,7 +44,9 @@ export const issueCertificate = async (req: Request, res: Response) => {
   }
 
   try {
-    const certificate = await createCertificate(payload);
+    const userId = (req as any).user?.id as string | undefined;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    const certificate = await createCertificate(payload, userId);
     return res.status(201).json({ certificate });
   } catch (error) {
     // eslint-disable-next-line no-console
@@ -61,7 +63,9 @@ export const fetchCertificate = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'certificateId is required' });
   }
 
-  const certificate = await getCertificate(certificateId);
+  const userId = (req as any).user?.id as string | undefined;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  const certificate = await getCertificate(certificateId, userId);
 
   if (!certificate) {
     return res.status(404).json({ error: 'Certificate not found' });
@@ -76,13 +80,16 @@ export const downloadCertificatePdf = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'certificateId is required' });
   }
 
-  const certificate = await getCertificate(certificateId);
+  const userId = (req as any).user?.id as string | undefined;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  const certificate = await getCertificate(certificateId, userId);
   if (!certificate) {
     return res.status(404).json({ error: 'Certificate not found' });
   }
 
   try {
-    const pdf = await generateCertificatePdf(certificate);
+    const fromStorage = await getCertificatePdfFromStorage(certificateId, userId);
+    const pdf = fromStorage ?? (await generateCertificatePdf(certificate));
     res.setHeader('Content-Type', 'application/pdf');
     const filename = `${certificate.certificateNumber}.pdf`;
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -91,5 +98,29 @@ export const downloadCertificatePdf = async (req: Request, res: Response) => {
     // eslint-disable-next-line no-console
     console.error('Failed to generate certificate PDF', error);
     return res.status(500).json({ error: 'Failed to generate certificate PDF' });
+  }
+};
+
+export const fetchCertificates = async (req: Request, res: Response) => {
+  const limitQ = req.query.limit ? Number(req.query.limit) : undefined;
+  const offsetQ = req.query.offset ? Number(req.query.offset) : undefined;
+  try {
+    const opts: { limit?: number; offset?: number } = {};
+    const limit = typeof limitQ === 'number' && Number.isFinite(limitQ) ? limitQ : 50;
+    const offset = typeof offsetQ === 'number' && Number.isFinite(offsetQ) ? offsetQ : 0;
+    const cappedLimit = Math.min(Math.max(1, limit), 100);
+    const safeOffset = Math.max(0, offset);
+    opts.limit = cappedLimit;
+    opts.offset = safeOffset;
+    const userId = (req as any).user?.id as string | undefined;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    const certificates = await listCertificates(opts, userId);
+    const hasMore = certificates.length === cappedLimit; // heuristic without total count
+    return res.json({ certificates, meta: { limit: cappedLimit, offset: safeOffset, hasMore } });
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to list certificates', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return res.status(500).json({ error: 'Failed to list certificates', details: message });
   }
 };

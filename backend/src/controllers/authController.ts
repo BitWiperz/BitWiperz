@@ -8,6 +8,17 @@ export const postRegister = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'email and password are required' });
   }
 
+  // Basic validations
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email));
+  const pwd = String(password);
+  const pwdOk = pwd.length >= 8 && /[A-Z]/.test(pwd) && /[a-z]/.test(pwd) && /\d/.test(pwd);
+  if (!emailOk) {
+    return res.status(400).json({ error: 'Invalid email format' });
+  }
+  if (!pwdOk) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters and include uppercase, lowercase, and a number' });
+  }
+
   try {
     const user = await register({ email, password, name });
     return res.status(201).json({ user });
@@ -25,6 +36,10 @@ export const postLogin = async (req: Request, res: Response) => {
   const { email, password } = req.body ?? {};
   if (!email || !password) {
     return res.status(400).json({ error: 'email and password are required' });
+  }
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email));
+  if (!emailOk) {
+    return res.status(400).json({ error: 'Invalid email format' });
   }
   try {
     const { token, user } = await login({ email, password });

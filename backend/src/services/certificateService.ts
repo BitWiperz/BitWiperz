@@ -2,7 +2,27 @@ import { createHash, randomUUID } from 'crypto';
 import { PDFDocument, StandardFonts, rgb, degrees } from 'pdf-lib';
 
 import type { Certificate, ErasureMetadata } from '../models/certificate.js';
-import { CertificateEntity } from '../models/certificateEntity.js';
+import type { CertificateRow } from '../models/certificateEntity.js';
+import { getSupabaseAdmin } from '../db/supabase.js';
+
+const getBucketName = (): string => process.env.CERT_STORAGE_BUCKET ?? 'certificates';
+const arrayBufferToBuffer = async (blob: Blob): Promise<Buffer> => {
+  const ab = await blob.arrayBuffer();
+  return Buffer.from(ab);
+};
+const ensureBucket = async () => {
+  const supabase = getSupabaseAdmin();
+  const bucket = getBucketName();
+  try {
+    const { error } = await supabase.storage.createBucket(bucket, { public: false });
+    if (error && !/already exists/i.test(error.message)) {
+      // eslint-disable-next-line no-console
+      console.warn('Bucket create error:', error.message);
+    }
+  } catch (e) {
+    // ignore bucket creation errors
+  }
+};
 
 const buildCertificateNumber = (issuedAtIso: string, driveId: string): string => {
   const dt = new Date(issuedAtIso);
@@ -17,44 +37,44 @@ const buildCertificateNumber = (issuedAtIso: string, driveId: string): string =>
   return `CERT-${dateStamp}-${driveSuffix}`;
 };
 
-const toCertificate = (row: CertificateEntity): Certificate => {
+const toCertificate = (row: CertificateRow): Certificate => {
   const cert: any = {
-    certificateId: row.certificateId,
-    certificateNumber: row.certificateNumber,
-    issuedAt: row.issuedAt.toISOString(),
+    certificateId: row.certificate_id,
+    certificateNumber: row.certificate_number,
+    issuedAt: row.issued_at,
     signature: row.signature,
-    driveId: row.driveId,
-    erasureMethod: row.erasureMethod,
-    startedAt: row.startedAt.toISOString(),
-    completedAt: row.completedAt.toISOString(),
+    driveId: row.drive_id,
+    erasureMethod: row.erasure_method,
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
     operator: {
-      name: row.operatorName,
+      name: row.operator_name,
     },
   };
-  if (row.serialNumber != null) cert.serialNumber = String((row as any).serialNumber);
-  if (row.model != null) cert.model = String((row as any).model);
-  if ((row as any).capacityBytes != null) {
-    const v: unknown = (row as any).capacityBytes;
+  if (row.serial_number != null) cert.serialNumber = String(row.serial_number);
+  if (row.model != null) cert.model = String(row.model);
+  if (row.capacity_bytes != null) {
+    const v: unknown = row.capacity_bytes;
     const n = typeof v === 'string' ? Number(v) : (v as number);
     if (Number.isFinite(n)) cert.capacityBytes = n as number;
   }
-  if (row.firmwareVersion != null) cert.firmwareVersion = String((row as any).firmwareVersion);
-  if (row.location != null) cert.location = String((row as any).location);
-  if (row.operatorId != null) cert.operator.id = String((row as any).operatorId);
-  if (row.operatorOrganization != null) cert.operator.organization = String((row as any).operatorOrganization);
-  const hasVer = (row as any).verificationHash != null || (row as any).verificationTool != null || (row as any).verificationNotes != null;
+  if (row.firmware_version != null) cert.firmwareVersion = String(row.firmware_version);
+  if (row.location != null) cert.location = String(row.location);
+  if (row.operator_id != null) cert.operator.id = String(row.operator_id);
+  if (row.operator_organization != null) cert.operator.organization = String(row.operator_organization);
+  const hasVer = row.verification_hash != null || row.verification_tool != null || row.verification_notes != null;
   if (hasVer) {
     const v: any = {};
-    if ((row as any).verificationHash != null) v.hash = String((row as any).verificationHash);
-    if ((row as any).verificationTool != null) v.tool = String((row as any).verificationTool);
-    if ((row as any).verificationNotes != null) v.notes = String((row as any).verificationNotes);
+    if (row.verification_hash != null) v.hash = String(row.verification_hash);
+    if (row.verification_tool != null) v.tool = String(row.verification_tool);
+    if (row.verification_notes != null) v.notes = String(row.verification_notes);
     cert.verification = v;
   }
-  if (row.notes != null) cert.notes = String((row as any).notes);
+  if (row.notes != null) cert.notes = String(row.notes);
   return cert as Certificate;
 };
 
-export const createCertificate = async (metadata: ErasureMetadata): Promise<Certificate> => {
+export const createCertificate = async (metadata: ErasureMetadata, userId: string): Promise<Certificate> => {
   const issuedAt = new Date();
   const certificateId = randomUUID();
   const certificateNumber = buildCertificateNumber(issuedAt.toISOString(), metadata.driveId);
@@ -68,40 +88,121 @@ export const createCertificate = async (metadata: ErasureMetadata): Promise<Cert
 
   const signature = createHash('sha256').update(signaturePayload).digest('hex');
 
-  const row = await CertificateEntity.create({
-    certificateId,
-    certificateNumber,
-    issuedAt,
+  const supabase = getSupabaseAdmin();
+  const insert = {
+    user_id: userId,
+    certificate_id: certificateId,
+    certificate_number: certificateNumber,
+    issued_at: issuedAt.toISOString(),
     signature,
     // Device info
-    driveId: metadata.driveId,
-    serialNumber: metadata.serialNumber ?? null,
+    drive_id: metadata.driveId,
+    serial_number: metadata.serialNumber ?? null,
     model: metadata.model ?? null,
-    capacityBytes: metadata.capacityBytes ?? null,
-    firmwareVersion: metadata.firmwareVersion ?? null,
+    capacity_bytes: metadata.capacityBytes != null ? String(metadata.capacityBytes) : null,
+    firmware_version: metadata.firmwareVersion ?? null,
     location: metadata.location ?? null,
     // Erasure metadata
-    erasureMethod: metadata.erasureMethod,
-    startedAt: new Date(metadata.startedAt),
-    completedAt: new Date(metadata.completedAt),
+    erasure_method: metadata.erasureMethod,
+    started_at: metadata.startedAt,
+    completed_at: metadata.completedAt,
     // Operator
-    operatorId: metadata.operator.id ?? null,
-    operatorName: metadata.operator.name,
-    operatorOrganization: metadata.operator.organization ?? null,
+    operator_id: metadata.operator.id ?? null,
+    operator_name: metadata.operator.name,
+    operator_organization: metadata.operator.organization ?? null,
     // Verification
-    verificationHash: metadata.verification?.hash ?? null,
-    verificationTool: metadata.verification?.tool ?? null,
-    verificationNotes: metadata.verification?.notes ?? null,
+    verification_hash: metadata.verification?.hash ?? null,
+    verification_tool: metadata.verification?.tool ?? null,
+    verification_notes: metadata.verification?.notes ?? null,
     // Notes
     notes: metadata.notes ?? null,
-  });
+    // Storage path (set when uploading PDF to storage) — null for now
+    pdf_storage_path: null,
+  };
+  const { data, error } = await supabase
+    .from('certificates')
+    .insert(insert)
+    .select('*')
+    .single();
+  if (error) {
+    // eslint-disable-next-line no-console
+    console.error('[certificates/insert] Failed', {
+      message: error.message,
+      details: (error as any).details,
+      hint: (error as any).hint,
+      code: (error as any).code,
+      payload: insert,
+    });
+    throw new Error(`Failed to create certificate: ${error.message}`);
+  }
+  const created = data as CertificateRow;
+  const cert = toCertificate(created);
 
-  return toCertificate(row);
+  // Generate and upload PDF to storage, then persist path
+  try {
+    await ensureBucket();
+    const pdf = await generateCertificatePdf(cert);
+    const path = `${userId}/${cert.certificateNumber}.pdf`;
+    const blob = new Blob([new Uint8Array(pdf)], { type: 'application/pdf' });
+    const bucket = getBucketName();
+    const maxAttempts = 3;
+    let attempt = 0;
+    let lastErr: Error | null = null;
+    while (attempt < maxAttempts) {
+      attempt += 1;
+      const { error: upErr } = await supabase.storage
+        .from(bucket)
+        .upload(path, blob, { contentType: 'application/pdf', upsert: true });
+      if (!upErr) {
+        await supabase
+          .from('certificates')
+          .update({ pdf_storage_path: path })
+          .eq('id', created.id)
+          .eq('user_id', userId);
+        lastErr = null;
+        break;
+      } else {
+        lastErr = new Error(upErr.message);
+        await new Promise((r) => setTimeout(r, attempt * 300));
+      }
+    }
+    if (lastErr) {
+      // eslint-disable-next-line no-console
+      console.error('[storage/upload] Failed after retries', { message: lastErr.message, path });
+    }
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('PDF upload failed; will fallback to on-demand generation. Reason:', (e as Error)?.message);
+  }
+
+  return cert;
 };
 
-export const getCertificate = async (certificateId: string): Promise<Certificate | undefined> => {
-  const row = await CertificateEntity.findOne({ where: { certificateId } });
-  return row ? toCertificate(row) : undefined;
+export const getCertificate = async (certificateId: string, userId: string): Promise<Certificate | undefined> => {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('certificates')
+    .select('*')
+    .eq('certificate_id', certificateId)
+    .eq('user_id', userId)
+    .single();
+  if (error) return undefined;
+  return data ? toCertificate(data as CertificateRow) : undefined;
+};
+
+export const listCertificates = async (opts: { limit?: number; offset?: number } = {}, userId: string): Promise<Certificate[]> => {
+  const limit = opts.limit ?? 50;
+  const offset = opts.offset ?? 0;
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('certificates')
+    .select('*')
+    .eq('user_id', userId)
+    .order('issued_at', { ascending: false })
+    .range(offset, offset + limit - 1);
+  if (error) throw new Error(`Failed to list certificates: ${error.message}`);
+  const rows = (data ?? []) as CertificateRow[];
+  return rows.map((r) => toCertificate(r));
 };
 
 export const generateCertificatePdf = async (certificate: Certificate): Promise<Buffer> => {
@@ -242,4 +343,29 @@ export const generateCertificatePdf = async (certificate: Certificate): Promise<
 
   const bytes = await doc.save();
   return Buffer.from(bytes);
+};
+
+export const getCertificatePdfFromStorage = async (
+  certificateId: string,
+  userId: string,
+): Promise<Buffer | null> => {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('certificates')
+    .select('pdf_storage_path')
+    .eq('certificate_id', certificateId)
+    .eq('user_id', userId)
+    .single();
+  if (error || !data || !data.pdf_storage_path) return null;
+  const path = data.pdf_storage_path as string;
+  const { data: file, error: dlErr } = await supabase.storage
+    .from(getBucketName())
+    .download(path);
+  if (dlErr || !file) return null;
+  // Supabase returns a Blob in Node 18+; convert to Buffer
+  try {
+    return await arrayBufferToBuffer(file as Blob);
+  } catch {
+    return null;
+  }
 };
