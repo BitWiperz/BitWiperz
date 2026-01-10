@@ -44,13 +44,24 @@ pub fn detect_external_drives(include_internal: bool) -> Result<Vec<DriveInfo>, 
                         continue;
                     }
 
+                    // Skip partitions; only include root devices
+                    // Partitions typically expose a "partition" file in sysfs.
+                    let partition_marker = path.join("partition");
+                    if partition_marker.exists() {
+                        continue;
+                    }
+
                     // Check if device is removable
                     let removable_path = path.join("removable");
                     if let Ok(content) = fs::read_to_string(&removable_path) {
                         let is_removable = content.trim() == "1";
 
+                        // Consider devices under USB topology as external too, even if removable=0
+                        let is_usb_external = is_device_usb(&path);
+                        let is_external = is_removable || is_usb_external;
+
                         // If we are only looking for removable drives and this is internal, skip
-                        if !include_internal && !is_removable {
+                        if !include_internal && !is_external {
                             continue;
                         }
 
@@ -68,6 +79,22 @@ pub fn detect_external_drives(include_internal: bool) -> Result<Vec<DriveInfo>, 
     }
 
     Ok(drives)
+}
+
+/// Determine if a sysfs device path is under USB topology
+fn is_device_usb(sysfs_device_path: &Path) -> bool {
+    // Resolve symlink to the actual device path in /sys/devices
+    if let Ok(real_path) = fs::canonicalize(sysfs_device_path) {
+        // Heuristic: if any ancestor contains "usb" segment, treat as external USB
+        for component in real_path.components() {
+            if let std::path::Component::Normal(name) = component {
+                if name.to_string_lossy().contains("usb") {
+                    return true;
+                }
+            }
+        }
+    }
+    false
 }
 
 /// Get the device path where the application is currently running from

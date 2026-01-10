@@ -8,7 +8,6 @@ import WipingProgress, { WipingProgressData } from "../components/WipingProgress
 import WipingStatus, { WipingStatusData } from "../components/WipingStatus";
 import ConfirmDialog from "../components/ConfirmDialog";
 import {
-  listDevices,
   startWiping,
   subscribeToProgress,
   subscribeToStatus,
@@ -17,6 +16,7 @@ import {
   type DeviceInfo,
   WipingResultType,
 } from "../services/wipingService";
+import { driveService, type DriveInfo as DetectedDrive } from "../services/driveService";
 import { createCertificate, type ErasureMetadata } from "../services/certificateService";
 
 interface ActiveWipingOperation {
@@ -43,8 +43,24 @@ export default function SelectDevices() {
   useEffect(() => {
     const loadDevices = async () => {
       try {
-        const fetchedDevices = await listDevices();
-        setDevices(fetchedDevices);
+        // Use drive detection service and map to DeviceInfo used by wiping flow
+        // Include internal drives to ensure comprehensive detection
+        const detected: DetectedDrive[] = await driveService.detectDrives(true);
+        const mapped: DeviceInfo[] = detected.map((d) => ({
+          id: d.device_path,
+          name: driveService.getDriveName(d),
+          model: d.model,
+          serial_number: "", // not available from drive detection
+          capacity_bytes: d.size_bytes,
+          device_type: d.device_path.includes("nvme")
+            ? "NVMe"
+            : d.device_path.includes("mmc")
+            ? "MMC"
+            : d.device_path.includes("vd")
+            ? "Virtual"
+            : "HDD",
+        }));
+        setDevices(mapped);
         setError(null);
       } catch (err) {
         console.error("Error loading devices:", err);
