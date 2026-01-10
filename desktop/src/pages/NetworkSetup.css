@@ -1,0 +1,453 @@
+.network-setup-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.network-setup-content {
+  width: 100%;
+  max-width: 700px;
+  animation: fadeIn 0.5s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.network-title {
+  font-size: 32px;
+  font-weight: 800;
+  color: #ffffff;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.network-subtitle {
+  font-size: 16px;
+  color: #b0b0b0;
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+.network-status-card,
+.wifi-networks-card {
+  background: #2a2a2a;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.status-header,
+.networks-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.status-header h3,
+.networks-header h3 {
+  font-size: 18px;
+  color: #ffffff;
+  margin: 0;
+}
+
+.refresh-btn,
+.scan-btn {
+  background: #3a3a3a;
+  border: none;
+  color: #ffffff;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.refresh-btn:hover,
+.scan-btn:hover {
+  background: #4a4a4a;
+}
+
+.refresh-btn:disabled,
+.scan-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.status-loading {
+  color: #b0b0b0;
+  text-align: center;
+  padding: 20px;
+}
+
+.status-connected {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: #1e3a1e;
+  border-radius: 8px;
+  border: 2px solid #4caf50;
+}
+
+.status-disconnected {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: #3a1e1e;
+  border-radius: 8px;
+  border: 2px solid #f44336;
+  color: #ffffff;
+}
+
+.status-icon {
+  font-size: 32px;
+}
+
+.status-details {
+  flex: 1;
+}
+
+.status-type {
+  font-size: 16px;
+  font-weight: 600;
+  color: #ffffff;
+  margin: 0 0 4px 0;
+}
+
+.status-ssid {
+  font-size: 14px;
+  color: #4caf50;
+  margin: 0 0 4px 0;
+}
+
+.status-ip {
+  font-size: 12px;
+  color: #b0b0b0;
+  margin: 0;
+}
+
+.internet-test {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #3a3a3a;
+}
+
+.test-btn {
+  background: #4caf50;
+  border: none;
+  color: #ffffff;
+  padding: 8px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.test-btn:hover:not(:disabled) {
+  background: #45a049;
+}
+
+.test-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.internet-status {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.internet-status.success {
+  color: #4caf50;
+}
+
+.internet-status.failure {
+  color: #f44336;
+}
+
+.error-message {
+  background: #3a1e1e;
+  border: 1px solid #f44336;
+  color: #ff6b6b;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.networks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.networks-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.networks-list::-webkit-scrollbar-track {
+  background: #2a2a2a;
+  border-radius: 4px;
+}
+
+.networks-list::-webkit-scrollbar-thumb {
+  background: #4caf50;
+  border-radius: 4px;
+}
+
+.no-networks {
+  color: #b0b0b0;
+  text-align: center;
+  padding: 20px;
+  font-size: 14px;
+}
+
+.network-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #3a3a3a;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+  text-align: left;
+}
+
+.network-item:hover:not(:disabled) {
+  background: #4a4a4a;
+  border-color: #4caf50;
+}
+
+.network-item.connected {
+  background: #1e3a1e;
+  border-color: #4caf50;
+  cursor: default;
+}
+
+.network-item:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.signal-icon {
+  font-size: 20px;
+}
+
+.signal-excellent {
+  color: #4caf50;
+}
+
+.signal-good {
+  color: #8bc34a;
+}
+
+.signal-fair {
+  color: #ffc107;
+}
+
+.signal-poor {
+  color: #ff9800;
+}
+
+.network-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.network-ssid {
+  font-size: 15px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.network-security {
+  font-size: 12px;
+  color: #b0b0b0;
+}
+
+.network-signal {
+  font-size: 14px;
+  color: #4caf50;
+  font-weight: 600;
+  min-width: 50px;
+  text-align: right;
+}
+
+.connected-badge {
+  background: #4caf50;
+  color: #ffffff;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.password-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+.password-dialog {
+  background: #2a2a2a;
+  border-radius: 12px;
+  padding: 30px;
+  width: 90%;
+  max-width: 400px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.password-dialog h3 {
+  font-size: 20px;
+  color: #ffffff;
+  margin: 0 0 8px 0;
+}
+
+.dialog-network-name {
+  font-size: 14px;
+  color: #4caf50;
+  margin: 0 0 20px 0;
+}
+
+.password-input {
+  width: 100%;
+  padding: 12px;
+  background: #3a3a3a;
+  border: 2px solid #4a4a4a;
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 14px;
+  margin-bottom: 20px;
+  transition: border-color 0.2s ease;
+}
+
+.password-input:focus {
+  outline: none;
+  border-color: #4caf50;
+}
+
+.dialog-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.cancel-btn,
+.connect-btn {
+  padding: 10px 24px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.cancel-btn {
+  background: #3a3a3a;
+  color: #ffffff;
+}
+
+.cancel-btn:hover:not(:disabled) {
+  background: #4a4a4a;
+}
+
+.connect-btn {
+  background: #4caf50;
+  color: #ffffff;
+}
+
+.connect-btn:hover:not(:disabled) {
+  background: #45a049;
+}
+
+.cancel-btn:disabled,
+.connect-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.setup-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-top: 30px;
+}
+
+.skip-btn-secondary {
+  background: transparent;
+  border: 2px solid #4a4a4a;
+  color: #b0b0b0;
+  padding: 12px 32px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.skip-btn-secondary:hover {
+  border-color: #4caf50;
+  color: #4caf50;
+}
+
+.continue-btn {
+  background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
+  border: none;
+  color: #ffffff;
+  padding: 12px 32px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+  flex: 1;
+}
+
+.continue-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(76, 175, 80, 0.4);
+}
+
+.continue-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}

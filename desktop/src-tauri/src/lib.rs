@@ -1,6 +1,11 @@
-mod drive_detection;
+mod device_detection;
+mod wiping;
+mod network;
 
-use drive_detection::{detect_external_drives, get_partitions, DriveInfo};
+use device_detection::get_devices;
+use std::sync::Arc;
+use wiping::types::{DeviceInfo, WipingTechnique};
+use wiping::ORCHESTRATOR;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -8,19 +13,43 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
-/// Detect external/USB drives connected to the Linux system
 #[tauri::command]
-#[cfg(target_os = "linux")]
-fn detect_drives(include_internal: Option<bool>) -> Result<Vec<DriveInfo>, String> {
-    let include_internal = include_internal.unwrap_or(false);
-    detect_external_drives(include_internal)
+fn list_devices() -> Vec<DeviceInfo> {
+    wiping::device::list_devices()
 }
 
-/// Get partitions for a specific device
 #[tauri::command]
-#[cfg(target_os = "linux")]
-fn get_device_partitions(device_path: String) -> Result<Vec<String>, String> {
-    get_partitions(&device_path)
+async fn start_wiping(
+    app: tauri::AppHandle,
+    device_ids: Vec<String>,
+    technique: String,
+) -> Result<String, String> {
+    let technique = match technique.as_str() {
+        "ATA Secure Erase" => WipingTechnique::AtaSecureErase,
+        "Crypto Erase" => WipingTechnique::CryptoErase,
+        "DoD 3-Pass" => WipingTechnique::MultipassDoD3,
+        "DoD 7-Pass" => WipingTechnique::MultipassDoD7,
+        "Gutmann 35-Pass" => WipingTechnique::MultipassGutmann,
+        "Block Erase" => WipingTechnique::BlockErase,
+        _ => return Err("Unknown wiping technique".to_string()),
+    };
+
+    let operation_id = ORCHESTRATOR
+        .start_wipe(Arc::new(app), device_ids, technique)
+        .await;
+
+    Ok(operation_id)
+}
+
+#[tauri::command]
+async fn cancel_wiping(operation_id: String) -> Result<(), String> {
+    ORCHESTRATOR.cancel_wipe(&operation_id).await;
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_wiping_status(operation_id: String) -> Result<bool, String> {
+    Ok(ORCHESTRATOR.get_status(&operation_id).await)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -30,10 +59,16 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .invoke_handler(tauri::generate_handler![
             greet,
-            #[cfg(target_os = "linux")]
-            detect_drives,
-            #[cfg(target_os = "linux")]
-            get_device_partitions
+            get_devices,
+            list_devices,
+            start_wiping,
+            cancel_wiping,
+            get_wiping_status,
+            network::list_wifi_networks,
+            network::connect_wifi,
+            network::get_network_status,
+            network::test_internet_connectivity,
+            network::disconnect_network
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

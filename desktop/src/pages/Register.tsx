@@ -3,6 +3,29 @@ import { useNavigate, Link } from 'react-router-dom';
 import { authService } from '../services/authService';
 import './Login.css';
 
+// Password validation helper - must match backend requirements
+const validatePassword = (pwd: string): { isValid: boolean; errors: string[] } => {
+  const errors: string[] = [];
+  
+  if (pwd.length < 8) {
+    errors.push('Minimum 8 characters');
+  }
+  if (!/[A-Z]/.test(pwd)) {
+    errors.push('At least one uppercase letter (A-Z)');
+  }
+  if (!/[a-z]/.test(pwd)) {
+    errors.push('At least one lowercase letter (a-z)');
+  }
+  if (!/\d/.test(pwd)) {
+    errors.push('At least one digit (0-9)');
+  }
+  
+  return {
+    isValid: errors.length === 0,
+    errors,
+  };
+};
+
 export function Register() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -12,17 +35,21 @@ export function Register() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  const passwordValidation = validatePassword(password);
+  const passwordsMatch = password === confirmPassword;
+  const isFormValid = password.length > 0 && passwordValidation.isValid && passwordsMatch && email.length > 0;
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
+    if (!passwordValidation.isValid) {
+      setError(`Password must contain: ${passwordValidation.errors.join(', ')}`);
       return;
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters long');
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
       return;
     }
 
@@ -75,7 +102,14 @@ export function Register() {
           </div>
 
           <div className="form-group">
-            <label htmlFor="password">Password</label>
+            <label htmlFor="password">
+              Password
+              {password && (
+                <span style={{ marginLeft: '8px', fontSize: '0.85em', color: passwordValidation.isValid ? '#4caf50' : '#f44336' }}>
+                  {passwordValidation.isValid ? '✓ Valid' : '✗ Invalid'}
+                </span>
+              )}
+            </label>
             <input
               id="password"
               type="password"
@@ -84,12 +118,29 @@ export function Register() {
               required
               placeholder="Enter your password"
               disabled={loading}
-              minLength={6}
+              minLength={8}
             />
+            {password && !passwordValidation.isValid && (
+              <div style={{ fontSize: '0.85em', color: '#f44336', marginTop: '4px' }}>
+                <p style={{ margin: '4px 0' }}>Password requirements:</p>
+                <ul style={{ margin: '4px 0', paddingLeft: '16px' }}>
+                  {passwordValidation.errors.map((err, idx) => (
+                    <li key={idx}>{err}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
 
           <div className="form-group">
-            <label htmlFor="confirmPassword">Confirm Password</label>
+            <label htmlFor="confirmPassword">
+              Confirm Password
+              {confirmPassword && (
+                <span style={{ marginLeft: '8px', fontSize: '0.85em', color: passwordsMatch ? '#4caf50' : '#f44336' }}>
+                  {passwordsMatch ? '✓ Match' : '✗ No match'}
+                </span>
+              )}
+            </label>
             <input
               id="confirmPassword"
               type="password"
@@ -101,7 +152,7 @@ export function Register() {
             />
           </div>
 
-          <button type="submit" className="auth-button" disabled={loading}>
+          <button type="submit" className="auth-button" disabled={loading || !isFormValid}>
             {loading ? 'Creating account...' : 'Register'}
           </button>
         </form>
