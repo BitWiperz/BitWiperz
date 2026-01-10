@@ -13,6 +13,18 @@ pub struct DriveInfo {
     pub is_mounted: bool,
 }
 
+/// Tauri command to detect external drives
+#[tauri::command]
+pub fn detect_drives(include_internal: bool) -> Result<Vec<DriveInfo>, String> {
+    detect_external_drives(include_internal)
+}
+
+/// Tauri command to get partitions for a specific device
+#[tauri::command]
+pub fn get_device_partitions(device_path: String) -> Result<Vec<String>, String> {
+    get_partitions(&device_path)
+}
+
 /// Detect external/USB drives connected to Linux system (excluding the drive the app is running from)
 pub fn detect_external_drives(include_internal: bool) -> Result<Vec<DriveInfo>, String> {
     let mut drives = Vec::new();

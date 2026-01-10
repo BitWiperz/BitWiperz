@@ -1,8 +1,7 @@
-mod device_detection;
+mod drive_detection;
 mod wiping;
 mod network;
 
-use device_detection::get_devices;
 use std::sync::Arc;
 use wiping::types::{DeviceInfo, WipingTechnique};
 use wiping::ORCHESTRATOR;
@@ -59,11 +58,12 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .invoke_handler(tauri::generate_handler![
             greet,
-            get_devices,
             list_devices,
             start_wiping,
             cancel_wiping,
             get_wiping_status,
+            drive_detection::detect_drives,
+            drive_detection::get_device_partitions,
             network::list_wifi_networks,
             network::connect_wifi,
             network::get_network_status,

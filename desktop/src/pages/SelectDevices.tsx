@@ -15,11 +15,9 @@ import {
   stringToTechnique,
   WipingTechnique,
   type DeviceInfo,
-  type ErasureMetadata,
   WipingResultType,
 } from "../services/wipingService";
-import { createCertificate } from "../services/certificateService";
-import { Device } from "../types/device";
+import { createCertificate, type ErasureMetadata } from "../services/certificateService";
 
 interface ActiveWipingOperation {
   operationId: string;
@@ -147,11 +145,11 @@ export default function SelectDevices() {
         serialNumber: device.serial_number,
         model: device.model,
         capacityBytes: device.capacity_bytes,
-        erasureMethod: activeOperation.technique,
+        erasureMethod: activeOperation.technique.toString(),
         startedAt: status.started_at,
         completedAt: status.completed_at,
         operator: {
-          name: device.id, // Real device identifier as operator
+          name: device.name || device.id,
         },
         verification: {
           hash: status.verification_hash,
@@ -194,9 +192,6 @@ export default function SelectDevices() {
   );
 
   const isWiping = activeOperation !== null;
-  const wipingCompleted =
-    activeOperation &&
-    activeOperation.deviceIds.every((id) => activeOperation.status.has(id));
 
   return (
     <div className="page-container">
