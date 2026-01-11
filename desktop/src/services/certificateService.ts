@@ -1,4 +1,5 @@
 import { authService } from './authService';
+import { invoke } from '@tauri-apps/api/core';
 
 // Feature flag: set via Vite env to surface mock data without backend
 const parseBool = (v: unknown): boolean => {
@@ -173,14 +174,30 @@ export async function issueAndDownloadCertificate(metadata: ErasureMetadata): Pr
   await downloadCertificatePdf(cert.certificateId);
 }
 
-// Preview certificate PDF in a new tab/window instead of forcing download
+// Preview certificate PDF in a new window/external viewer for Tauri desktop
 export async function previewCertificatePdf(certificateId: string): Promise<void> {
   if (USE_MOCK_DATA) {
     const content = `%PDF-1.4\n% Mock PDF for certificate ${certificateId}\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF`;
     const blob = new Blob([content], { type: 'application/pdf' });
-    openBlobPreview(blob);
-    return;
+    
+    // For Tauri, write to temp file and open with system viewer
+    try {
+      const arrayBuffer = await blob.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+      const tempPath = await invoke<string>('write_temp_pdf', {
+        filename: `certificate-${certificateId}.pdf`,
+        data: Array.from(uint8Array),
+      });
+      await invoke('open_file_with_system', { path: tempPath });
+      return;
+    } catch (e) {
+      console.error('Failed to preview with Tauri, falling back to blob:', e);
+      // Fallback for non-Tauri environments
+      openBlobPreview(blob);
+      return;
+    }
   }
+  
   const res = await authService.apiFetch(`/certificates/${certificateId}/pdf`, { method: 'GET' }, true);
   if (!res.ok) {
     const errText = await res.text();
@@ -192,7 +209,21 @@ export async function previewCertificatePdf(certificateId: string): Promise<void
     }
   }
   const blob = await res.blob();
-  openBlobPreview(blob);
+  
+  // For Tauri desktop, write to temp file and open
+  try {
+    const arrayBuffer = await blob.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+    const tempPath = await invoke<string>('write_temp_pdf', {
+      filename: `certificate-${certificateId}.pdf`,
+      data: Array.from(uint8Array),
+    });
+    await invoke('open_file_with_system', { path: tempPath });
+  } catch (e) {
+    console.error('Failed to preview with Tauri, falling back to blob:', e);
+    // Fallback for non-Tauri environments (web)
+    openBlobPreview(blob);
+  }
 }
 
 function triggerDownload(blob: Blob, filename: string) {

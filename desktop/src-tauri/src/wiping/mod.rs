@@ -10,6 +10,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 use once_cell::sync::Lazy;
+use tauri::Emitter;
 
 use crate::wiping::types::{WipingStatus, WipingTechnique};
 
@@ -42,9 +43,26 @@ impl WipingOrchestrator {
             let dev_id = device_id.clone();
             let tech = technique.clone();
             let app_clone = app.clone();
+            let active_ops_clone = active_ops.clone();
 
             let handle = tokio::spawn(async move {
-                execute_wipe_for_device(app_clone, op_id, dev_id, tech).await
+                let status = execute_wipe_for_device(app_clone.clone(), op_id.clone(), dev_id.clone(), tech).await;
+                
+                // Emit completion event
+                let _ = app_clone.as_ref().emit("wiping-complete", &status);
+                
+                // Remove this operation from active operations
+                let mut ops = active_ops_clone.write().await;
+                if let Some(handles) = ops.get_mut(&op_id) {
+                    // Keep only handles that aren't finished
+                    handles.retain(|h| !h.is_finished());
+                    // If all handles are done, remove the operation entirely
+                    if handles.is_empty() {
+                        ops.remove(&op_id);
+                    }
+                }
+                
+                status
             });
 
             handles.push(handle);

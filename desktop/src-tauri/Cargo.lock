@@ -739,9 +739,12 @@ name = "desktop"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "libc",
  "once_cell",
+ "rand 0.8.5",
  "serde",
  "serde_json",
+ "sha2",
  "sysinfo",
  "tauri",
  "tauri-build",

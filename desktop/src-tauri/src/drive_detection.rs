@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DriveInfo {
@@ -31,6 +31,14 @@ pub fn detect_external_drives(include_internal: bool) -> Result<Vec<DriveInfo>, 
     
     // Get the device path where the application is running from
     let app_device = get_app_device_path()?;
+    
+    // Get the base device (without partition number) of the app device
+    let app_base_device = get_base_device_name(&app_device);
+    
+    // Get the executable path to check against mount points
+    let exe_path = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.to_str().map(|s| s.to_string()));
 
     // Read /sys/class/block to find block devices
     let block_path = "/sys/class/block";
@@ -51,6 +59,12 @@ pub fn detect_external_drives(include_internal: bool) -> Result<Vec<DriveInfo>, 
                         continue;
                     }
 
+                    // Skip if this is the app's base device
+                    if device_name == app_base_device {
+                        eprintln!("Skipping app device: {}", device_name);
+                        continue;
+                    }
+
                     // Check if device is removable
                     let removable_path = path.join("removable");
                     if let Ok(content) = fs::read_to_string(&removable_path) {
@@ -68,6 +82,16 @@ pub fn detect_external_drives(include_internal: bool) -> Result<Vec<DriveInfo>, 
                         if let Some(drive) = get_drive_info(&path, device_name, is_removable) {
                             // Skip the drive that the app is running from
                             if !drive.device_path.eq(&app_device) {
+                                // Also check if mount point contains executable path
+                                if let Some(ref mount_point) = drive.mount_point {
+                                    if let Some(ref exe) = exe_path {
+                                        if exe.starts_with(mount_point) {
+                                            eprintln!("Skipping device with executable mount: {}", drive.device_path);
+                                            continue;
+                                        }
+                                    }
+                                }
+                                
                                 drives.push(drive);
                             }
                         }
@@ -79,6 +103,26 @@ pub fn detect_external_drives(include_internal: bool) -> Result<Vec<DriveInfo>, 
     }
 
     Ok(drives)
+}
+
+/// Get base device name without partition suffix
+/// e.g., sda1 -> sda, nvme0n1p1 -> nvme0n1
+fn get_base_device_name(device_path: &str) -> String {
+    let device_name = device_path.trim_start_matches("/dev/");
+    
+    if device_name.contains("nvme") {
+        // NVMe devices: nvme0n1p1 -> nvme0n1
+        if let Some(pos) = device_name.rfind('p') {
+            if device_name[pos+1..].chars().all(|c| c.is_numeric()) {
+                return device_name[..pos].to_string();
+            }
+        }
+    } else {
+        // Traditional devices: sda1 -> sda
+        let trimmed = device_name.trim_end_matches(|c: char| c.is_numeric());
+        return trimmed.to_string();
+    }
+    device_name.to_string()
 }
 
 /// Determine if a sysfs device path is under USB topology
@@ -107,7 +151,11 @@ fn get_app_device_path() -> Result<String, String> {
                 Ok(mounts) => {
                     let cwd_str = cwd.to_string_lossy();
                     
+                    let mut best_match = String::new();
+                    let mut best_mount_len = 0;
+                    
                     // Find the mount entry that contains our current directory
+                    // Use the longest matching mount point for accuracy
                     for line in mounts.lines() {
                         let parts: Vec<&str> = line.split_whitespace().collect();
                         if parts.len() >= 2 {
@@ -115,10 +163,17 @@ fn get_app_device_path() -> Result<String, String> {
                             let mount_point = parts[1];
                             
                             // Check if our cwd is under this mount point
-                            if cwd_str.starts_with(mount_point) {
-                                return Ok(device.to_string());
+                            if cwd_str.starts_with(mount_point) && mount_point.len() > best_mount_len {
+                                best_match = device.to_string();
+                                best_mount_len = mount_point.len();
                             }
                         }
+                    }
+                    
+                    if !best_match.is_empty() {
+                        // If we got a partition, derive the parent device
+                        let base_device = get_base_device_name(&best_match);
+                        return Ok(format!("/dev/{}", base_device));
                     }
                     
                     // Fallback: couldn't determine app device

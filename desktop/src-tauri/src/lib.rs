@@ -3,6 +3,8 @@ mod wiping;
 mod network;
 
 use std::sync::Arc;
+use std::fs::File;
+use std::io::Write;
 use wiping::types::{DeviceInfo, WipingTechnique};
 use wiping::ORCHESTRATOR;
 
@@ -51,6 +53,59 @@ async fn get_wiping_status(operation_id: String) -> Result<bool, String> {
     Ok(ORCHESTRATOR.get_status(&operation_id).await)
 }
 
+#[tauri::command]
+fn write_temp_pdf(filename: String, data: Vec<u8>) -> Result<String, String> {
+    // Get temp directory
+    let temp_dir = std::env::temp_dir();
+    let file_path = temp_dir.join(&filename);
+    
+    // Write PDF data to temp file
+    let mut file = File::create(&file_path)
+        .map_err(|e| format!("Failed to create temp file: {}", e))?;
+    
+    file.write_all(&data)
+        .map_err(|e| format!("Failed to write PDF data: {}", e))?;
+    
+    // Return the full path as a string
+    file_path.to_str()
+        .ok_or_else(|| "Failed to convert path to string".to_string())
+        .map(|s| s.to_string())
+}
+
+#[tauri::command]
+async fn open_file_with_system(path: String) -> Result<(), String> {
+    // Use xdg-open on Linux to open file with default application
+    #[cfg(target_os = "linux")]
+    {
+        let status = std::process::Command::new("xdg-open")
+            .arg(&path)
+            .status()
+            .map_err(|e| format!("Failed to open file: {}", e))?;
+        
+        if !status.success() {
+            return Err("xdg-open failed to open file".to_string());
+        }
+    }
+    
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(&["/C", "start", "", &path])
+            .spawn()
+            .map_err(|e| format!("Failed to open file: {}", e))?;
+    }
+    
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open file: {}", e))?;
+    }
+    
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -62,6 +117,8 @@ pub fn run() {
             start_wiping,
             cancel_wiping,
             get_wiping_status,
+            write_temp_pdf,
+            open_file_with_system,
             drive_detection::detect_drives,
             drive_detection::get_device_partitions,
             network::list_wifi_networks,

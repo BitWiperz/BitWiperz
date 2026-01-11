@@ -44,8 +44,8 @@ export default function SelectDevices() {
     const loadDevices = async () => {
       try {
         // Use drive detection service and map to DeviceInfo used by wiping flow
-        // Include internal drives to ensure comprehensive detection
-        const detected: DetectedDrive[] = await driveService.detectDrives(true);
+        // Only include external/removable drives by default for safety
+        const detected: DetectedDrive[] = await driveService.detectDrives(false);
         const mapped: DeviceInfo[] = detected.map((d) => ({
           id: d.device_path,
           name: driveService.getDriveName(d),

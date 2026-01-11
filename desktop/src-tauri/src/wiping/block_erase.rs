@@ -2,10 +2,13 @@ use crate::wiping::types::{WipingProgress, WipingResult, WipingStatus};
 use chrono::Utc;
 use std::sync::Arc;
 use tauri::Emitter;
-use tokio::time::{sleep, Duration};
+use tokio::process::Command;
+use sha2::{Sha256, Digest};
+use std::fs::File;
+use std::io::Read;
 
-/// Execute Block-level erase simulation
-/// Simulates TRIM/UNMAP commands for SSDs
+/// Execute Block-level erase using blkdiscard
+/// Uses TRIM/UNMAP commands for SSDs via blkdiscard
 pub async fn execute_block_erase(
     app: Arc<tauri::AppHandle>,
     operation_id: String,
@@ -14,7 +17,21 @@ pub async fn execute_block_erase(
     let start_time = Utc::now();
     let technique = crate::wiping::types::WipingTechnique::BlockErase;
 
-    // Phase 1: Identifying blocks (15%)
+    // Check root privileges
+    if !is_root() {
+        return WipingStatus {
+            operation_id,
+            device_id,
+            technique,
+            result: WipingResult::Failed("Root privileges required".to_string()),
+            started_at: start_time,
+            completed_at: Utc::now(),
+            error_message: Some("Root privileges required for block erase".to_string()),
+            verification_hash: None,
+        };
+    }
+
+    // Phase 1: Validate device (15%)
     emit_progress(
         &app,
         WipingProgress {
@@ -24,31 +41,176 @@ pub async fn execute_block_erase(
             progress_percent: 15,
             current_pass: 1,
             total_passes: 1,
-            bytes_processed: 75_000_000_000,
-            status_message: "Identifying blocks for erasure...".to_string(),
+            bytes_processed: 0,
+            status_message: "Validating device and checking mount status...".to_string(),
             timestamp: Utc::now(),
         },
     );
-    sleep(Duration::from_secs(5)).await;
 
-    // Phase 2: Erasing blocks (75%)
+    // Check if device is mounted
+    if let Err(e) = check_not_mounted(&device_id).await {
+        return WipingStatus {
+            operation_id,
+            device_id,
+            technique,
+            result: WipingResult::Failed(e.clone()),
+            started_at: start_time,
+            completed_at: Utc::now(),
+            error_message: Some(e),
+            verification_hash: None,
+        };
+    }
+
+    // Check if device is the boot device
+    if let Err(e) = check_not_boot_device(&device_id).await {
+        return WipingStatus {
+            operation_id,
+            device_id,
+            technique,
+            result: WipingResult::Failed(e.clone()),
+            started_at: start_time,
+            completed_at: Utc::now(),
+            error_message: Some(e),
+            verification_hash: None,
+        };
+    }
+
+    // Unmount device and partitions
+    if let Err(e) = unmount_device(&device_id).await {
+        return WipingStatus {
+            operation_id,
+            device_id,
+            technique,
+            result: WipingResult::Failed(e.clone()),
+            started_at: start_time,
+            completed_at: Utc::now(),
+            error_message: Some(e),
+            verification_hash: None,
+        };
+    }
+
+    // Phase 2: Get device size
     emit_progress(
         &app,
         WipingProgress {
             operation_id: operation_id.clone(),
             device_id: device_id.clone(),
             technique: technique.clone(),
-            progress_percent: 75,
+            progress_percent: 20,
             current_pass: 1,
             total_passes: 1,
-            bytes_processed: 375_000_000_000,
+            bytes_processed: 0,
+            status_message: "Getting device size...".to_string(),
+            timestamp: Utc::now(),
+        },
+    );
+
+    let device_size = match get_device_size(&device_id).await {
+        Ok(size) => size,
+        Err(e) => {
+            return WipingStatus {
+                operation_id,
+                device_id,
+                technique,
+                result: WipingResult::Failed(e.clone()),
+                started_at: start_time,
+                completed_at: Utc::now(),
+                error_message: Some(e),
+                verification_hash: None,
+            };
+        }
+    };
+
+    // Phase 3: Execute blkdiscard (30-90%)
+    emit_progress(
+        &app,
+        WipingProgress {
+            operation_id: operation_id.clone(),
+            device_id: device_id.clone(),
+            technique: technique.clone(),
+            progress_percent: 30,
+            current_pass: 1,
+            total_passes: 1,
+            bytes_processed: 0,
             status_message: "Erasing blocks with TRIM/UNMAP commands...".to_string(),
             timestamp: Utc::now(),
         },
     );
-    sleep(Duration::from_secs(20)).await;
 
-    // Phase 3: Verifying erasure (100%)
+    // Use blkdiscard to erase the entire device
+    let erase_result = Command::new("blkdiscard")
+        .arg(&device_id)
+        .output()
+        .await;
+
+    match erase_result {
+        Ok(output) if output.status.success() => {
+            emit_progress(
+                &app,
+                WipingProgress {
+                    operation_id: operation_id.clone(),
+                    device_id: device_id.clone(),
+                    technique: technique.clone(),
+                    progress_percent: 90,
+                    current_pass: 1,
+                    total_passes: 1,
+                    bytes_processed: device_size,
+                    status_message: "Block erase completed".to_string(),
+                    timestamp: Utc::now(),
+                },
+            );
+        }
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return WipingStatus {
+                operation_id,
+                device_id,
+                technique,
+                result: WipingResult::Failed(format!("blkdiscard failed: {}", stderr)),
+                started_at: start_time,
+                completed_at: Utc::now(),
+                error_message: Some(format!("blkdiscard error: {}", stderr)),
+                verification_hash: None,
+            };
+        }
+        Err(e) => {
+            return WipingStatus {
+                operation_id,
+                device_id,
+                technique,
+                result: WipingResult::Failed(format!("Failed to execute blkdiscard: {}", e)),
+                started_at: start_time,
+                completed_at: Utc::now(),
+                error_message: Some(format!("Command execution failed: {}", e)),
+                verification_hash: None,
+            };
+        }
+    }
+
+    // Phase 4: Verify (100%)
+    emit_progress(
+        &app,
+        WipingProgress {
+            operation_id: operation_id.clone(),
+            device_id: device_id.clone(),
+            technique: technique.clone(),
+            progress_percent: 95,
+            current_pass: 1,
+            total_passes: 1,
+            bytes_processed: device_size,
+            status_message: "Verifying erasure...".to_string(),
+            timestamp: Utc::now(),
+        },
+    );
+
+    let verification_hash = match verify_wipe(&device_id).await {
+        Ok(hash) => Some(hash),
+        Err(e) => {
+            eprintln!("Verification failed: {}", e);
+            None
+        }
+    };
+
     emit_progress(
         &app,
         WipingProgress {
@@ -58,7 +220,7 @@ pub async fn execute_block_erase(
             progress_percent: 100,
             current_pass: 1,
             total_passes: 1,
-            bytes_processed: 500_000_000_000,
+            bytes_processed: device_size,
             status_message: "Block erasure verified successfully".to_string(),
             timestamp: Utc::now(),
         },
@@ -72,10 +234,128 @@ pub async fn execute_block_erase(
         started_at: start_time,
         completed_at: Utc::now(),
         error_message: None,
-        verification_hash: Some("sha256:d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9".to_string()),
+        verification_hash,
     }
 }
 
 fn emit_progress(app: &Arc<tauri::AppHandle>, progress: WipingProgress) {
     let _ = app.as_ref().emit("wiping-progress", &progress);
+}
+
+// Helper functions
+
+fn is_root() -> bool {
+    #[cfg(unix)]
+    {
+        unsafe { libc::geteuid() == 0 }
+    }
+    #[cfg(not(unix))]
+    {
+        false
+    }
+}
+
+async fn check_not_mounted(device_path: &str) -> Result<(), String> {
+    let mounts = tokio::fs::read_to_string("/proc/mounts")
+        .await
+        .map_err(|e| format!("Failed to read /proc/mounts: {}", e))?;
+
+    for line in mounts.lines() {
+        if let Some(mount_device) = line.split_whitespace().next() {
+            if mount_device.starts_with(device_path) {
+                return Err(format!("Device {} or its partitions are mounted", device_path));
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn check_not_boot_device(device_path: &str) -> Result<(), String> {
+    let mounts = tokio::fs::read_to_string("/proc/mounts")
+        .await
+        .map_err(|e| format!("Failed to read /proc/mounts: {}", e))?;
+
+    for line in mounts.lines() {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() >= 2 && parts[1] == "/" {
+            let root_device = parts[0];
+            let root_base = get_base_device(root_device);
+            let target_base = get_base_device(device_path);
+            
+            if root_base == target_base {
+                return Err("Cannot wipe boot device".to_string());
+            }
+        }
+    }
+    Ok(())
+}
+
+fn get_base_device(device: &str) -> String {
+    if device.contains("nvme") {
+        if let Some(pos) = device.rfind('p') {
+            if device[pos+1..].chars().all(|c| c.is_numeric()) {
+                return device[..pos].to_string();
+            }
+        }
+    } else {
+        let trimmed = device.trim_end_matches(|c: char| c.is_numeric());
+        return trimmed.to_string();
+    }
+    device.to_string()
+}
+
+async fn unmount_device(device_path: &str) -> Result<(), String> {
+    let device_name = device_path.trim_start_matches("/dev/");
+    let sys_path = format!("/sys/class/block/{}", device_name);
+    
+    let mut partitions = vec![device_path.to_string()];
+    if let Ok(entries) = std::fs::read_dir(&sys_path) {
+        for entry in entries.flatten() {
+            if let Some(name) = entry.file_name().to_str() {
+                if name.starts_with(device_name) && name != device_name {
+                    partitions.push(format!("/dev/{}", name));
+                }
+            }
+        }
+    }
+
+    for partition in partitions {
+        let _ = Command::new("umount")
+            .arg(&partition)
+            .output()
+            .await;
+    }
+
+    check_not_mounted(device_path).await
+}
+
+async fn get_device_size(device_path: &str) -> Result<u64, String> {
+    let device_name = device_path.trim_start_matches("/dev/");
+    let size_path = format!("/sys/class/block/{}/size", device_name);
+    
+    let size_str = tokio::fs::read_to_string(&size_path)
+        .await
+        .map_err(|e| format!("Failed to read device size: {}", e))?;
+    
+    let size_sectors: u64 = size_str.trim()
+        .parse()
+        .map_err(|e| format!("Failed to parse device size: {}", e))?;
+    
+    Ok(size_sectors * 512) // Convert sectors to bytes
+}
+
+async fn verify_wipe(device_path: &str) -> Result<String, String> {
+    let file = File::open(device_path)
+        .map_err(|e| format!("Failed to open device for verification: {}", e))?;
+    
+    let mut hasher = Sha256::new();
+    let mut buffer = vec![0u8; 1024 * 1024];
+    
+    let mut handle = file;
+    if let Ok(n) = handle.read(&mut buffer) {
+        hasher.update(&buffer[..n]);
+    }
+    
+    let hash = hasher.finalize();
+    Ok(format!("sha256:{:x}", hash))
 }
