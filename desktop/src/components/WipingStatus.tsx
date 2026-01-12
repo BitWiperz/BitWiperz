@@ -22,6 +22,7 @@ interface WipingStatusProps {
   status: WipingStatusData;
   onGenerateCertificate?: () => void;
   onViewReport?: () => void;
+  onRetry?: () => void;
   isGeneratingCertificate?: boolean;
 }
 
@@ -30,6 +31,7 @@ export default function WipingStatus({
   status,
   onGenerateCertificate,
   onViewReport,
+  onRetry,
   isGeneratingCertificate = false,
 }: WipingStatusProps) {
   const isSuccess = status.result === "Success";
@@ -196,7 +198,9 @@ export default function WipingStatus({
 
       {isFailed && (
         <div className="status-actions">
-          <button className="action-button secondary">Retry Wiping</button>
+          <button className="action-button secondary" onClick={onRetry}>
+            Retry Wiping
+          </button>
         </div>
       )}
     </div>

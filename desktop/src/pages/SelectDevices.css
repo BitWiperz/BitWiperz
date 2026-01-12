@@ -168,3 +168,44 @@
 .error-message button:hover {
   background-color: #b71c1c;
 }
+.operation-complete-actions {
+  margin-top: 24px;
+  padding: 20px;
+  text-align: center;
+  border-top: 2px solid #f0f0f0;
+}
+
+.operation-complete-actions .action-button {
+  padding: 12px 32px;
+  font-size: 16px;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: 'Inter', sans-serif;
+}
+
+.operation-complete-actions .action-button.primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.operation-complete-actions .action-button.primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.operation-complete-actions .action-button.primary:active {
+  transform: translateY(0);
+}
+
+.toast-container {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}

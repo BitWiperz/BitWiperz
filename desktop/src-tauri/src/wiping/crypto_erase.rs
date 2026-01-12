@@ -3,6 +3,7 @@ use chrono::Utc;
 use std::sync::Arc;
 use tauri::Emitter;
 use tokio::process::Command;
+use tokio_util::sync::CancellationToken;
 use sha2::{Sha256, Digest};
 use std::fs::File;
 use std::io::Read;
@@ -14,6 +15,7 @@ pub async fn execute_crypto_erase(
     app: Arc<tauri::AppHandle>,
     operation_id: String,
     device_id: String,
+    cancel_token: CancellationToken,
 ) -> WipingStatus {
     let start_time = Utc::now();
     let technique = crate::wiping::types::WipingTechnique::CryptoErase;
@@ -24,7 +26,7 @@ pub async fn execute_crypto_erase(
             operation_id,
             device_id,
             technique,
-            result: WipingResult::Failed("Root privileges required".to_string()),
+            result: WipingResult::Failed,
             started_at: start_time,
             completed_at: Utc::now(),
             error_message: Some("Root privileges required for crypto erase".to_string()),
@@ -54,7 +56,7 @@ pub async fn execute_crypto_erase(
             operation_id,
             device_id,
             technique,
-            result: WipingResult::Failed(e.clone()),
+            result: WipingResult::Failed,
             started_at: start_time,
             completed_at: Utc::now(),
             error_message: Some(e),
@@ -68,7 +70,7 @@ pub async fn execute_crypto_erase(
             operation_id,
             device_id,
             technique,
-            result: WipingResult::Failed(e.clone()),
+            result: WipingResult::Failed,
             started_at: start_time,
             completed_at: Utc::now(),
             error_message: Some(e),
@@ -82,7 +84,7 @@ pub async fn execute_crypto_erase(
             operation_id,
             device_id,
             technique,
-            result: WipingResult::Failed(e.clone()),
+            result: WipingResult::Failed,
             started_at: start_time,
             completed_at: Utc::now(),
             error_message: Some(e),
@@ -95,10 +97,10 @@ pub async fn execute_crypto_erase(
 
     if is_nvme {
         // Execute NVMe format with secure erase
-        return execute_nvme_crypto_erase(app, operation_id, device_id, technique, start_time).await;
+        return execute_nvme_crypto_erase(app, operation_id, device_id, technique, start_time, cancel_token).await;
     } else {
         // For SATA/other drives, check for self-encrypting drive support
-        return execute_sed_crypto_erase(app, operation_id, device_id, technique, start_time).await;
+        return execute_sed_crypto_erase(app, operation_id, device_id, technique, start_time, cancel_token).await;
     }
 }
 
@@ -108,6 +110,7 @@ async fn execute_nvme_crypto_erase(
     device_id: String,
     technique: crate::wiping::types::WipingTechnique,
     start_time: chrono::DateTime<Utc>,
+    cancel_token: CancellationToken,
 ) -> WipingStatus {
     // Phase 2: Check NVMe capabilities (40%)
     emit_progress(
@@ -136,7 +139,7 @@ async fn execute_nvme_crypto_erase(
             operation_id,
             device_id,
             technique,
-            result: WipingResult::Failed("nvme-cli not installed".to_string()),
+            result: WipingResult::Failed,
             started_at: start_time,
             completed_at: Utc::now(),
             error_message: Some("nvme-cli tool is required for NVMe crypto erase".to_string()),
@@ -160,58 +163,113 @@ async fn execute_nvme_crypto_erase(
         },
     );
 
-    // Use NVMe format with secure erase level 2 (cryptographic erase)
-    let format_result = Command::new("nvme")
+    // Check for cancellation before starting
+    if cancel_token.is_cancelled() {
+        return WipingStatus {
+            operation_id,
+            device_id,
+            technique,
+            result: WipingResult::Cancelled,
+            started_at: start_time,
+            completed_at: Utc::now(),
+            error_message: Some("Operation cancelled before erase started".to_string()),
+            verification_hash: None,
+        };
+    }
+
+    // Spawn NVMe format as a child process
+    let mut child = match Command::new("nvme")
         .arg("format")
         .arg(&device_id)
         .arg("--ses=2") // Secure Erase Setting: 2 = Cryptographic Erase
-        .output()
-        .await;
-
-    match format_result {
-        Ok(output) if output.status.success() => {
-            emit_progress(
-                &app,
-                WipingProgress {
-                    operation_id: operation_id.clone(),
-                    device_id: device_id.clone(),
-                    technique: technique.clone(),
-                    progress_percent: 90,
-                    current_pass: 1,
-                    total_passes: 1,
-                    bytes_processed: 0,
-                    status_message: "Cryptographic erase completed".to_string(),
-                    timestamp: Utc::now(),
-                },
-            );
-        }
-        Ok(output) => {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            return WipingStatus {
-                operation_id,
-                device_id,
-                technique,
-                result: WipingResult::Failed(format!("NVMe format failed: {} {}", stdout, stderr)),
-                started_at: start_time,
-                completed_at: Utc::now(),
-                error_message: Some(format!("nvme format error: {}", stderr)),
-                verification_hash: None,
-            };
-        }
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+    {
+        Ok(child) => child,
         Err(e) => {
             return WipingStatus {
                 operation_id,
                 device_id,
                 technique,
-                result: WipingResult::Failed(format!("Failed to execute nvme format: {}", e)),
+                result: WipingResult::Failed,
                 started_at: start_time,
                 completed_at: Utc::now(),
-                error_message: Some(format!("Command execution failed: {}", e)),
+                error_message: Some(format!("Failed to spawn nvme format: {}", e)),
                 verification_hash: None,
             };
         }
-    }
+    };
+
+    // Wait for the child process or cancellation
+    tokio::select! {
+        result = child.wait() => {
+            match result {
+                Ok(status) if status.success() => {
+                    emit_progress(
+                        &app,
+                        WipingProgress {
+                            operation_id: operation_id.clone(),
+                            device_id: device_id.clone(),
+                            technique: technique.clone(),
+                            progress_percent: 90,
+                            current_pass: 1,
+                            total_passes: 1,
+                            bytes_processed: 0,
+                            status_message: "Cryptographic erase completed".to_string(),
+                            timestamp: Utc::now(),
+                        },
+                    );
+                }
+                Ok(_status) => {
+                    // Process failed, try to get stderr
+                    let mut stderr = vec![];
+                    if let Some(mut stderr_pipe) = child.stderr.take() {
+                        use tokio::io::AsyncReadExt;
+                        let _ = stderr_pipe.read_to_end(&mut stderr).await;
+                    }
+                    
+                    return WipingStatus {
+                        operation_id,
+                        device_id,
+                        technique,
+                        result: WipingResult::Failed,
+                        started_at: start_time,
+                        completed_at: Utc::now(),
+                        error_message: Some(format!("nvme format error: {}", String::from_utf8_lossy(&stderr))),
+                        verification_hash: None,
+                    };
+                }
+                Err(e) => {
+                    return WipingStatus {
+                        operation_id,
+                        device_id,
+                        technique,
+                        result: WipingResult::Failed,
+                        started_at: start_time,
+                        completed_at: Utc::now(),
+                        error_message: Some(format!("Command execution failed: {}", e)),
+                        verification_hash: None,
+                    };
+                }
+            }
+        }
+        _ = cancel_token.cancelled() => {
+            // Kill the child process
+            let _ = child.kill().await;
+            
+            return WipingStatus {
+                operation_id,
+                device_id,
+                technique,
+                result: WipingResult::Cancelled,
+                started_at: start_time,
+                completed_at: Utc::now(),
+                error_message: Some("Operation cancelled during erase".to_string()),
+                verification_hash: None,
+            };
+        }
+    };
 
     // Phase 4: Verify (100%)
     emit_progress(
@@ -270,6 +328,7 @@ async fn execute_sed_crypto_erase(
     device_id: String,
     technique: crate::wiping::types::WipingTechnique,
     start_time: chrono::DateTime<Utc>,
+    _cancel_token: CancellationToken,
 ) -> WipingStatus {
     // For non-NVMe devices, crypto erase is typically not supported
     // unless it's a self-encrypting drive (SED)
@@ -300,7 +359,7 @@ async fn execute_sed_crypto_erase(
             operation_id,
             device_id,
             technique,
-            result: WipingResult::Failed("Crypto erase not supported for this device type".to_string()),
+            result: WipingResult::Failed,
             started_at: start_time,
             completed_at: Utc::now(),
             error_message: Some("This device does not support cryptographic erase. Try multipass or block erase instead.".to_string()),
@@ -314,7 +373,7 @@ async fn execute_sed_crypto_erase(
         operation_id,
         device_id,
         technique,
-        result: WipingResult::Failed("Self-encrypting drive crypto erase not yet implemented".to_string()),
+        result: WipingResult::Failed,
         started_at: start_time,
         completed_at: Utc::now(),
         error_message: Some("SED crypto erase requires additional implementation. Use multipass erase instead.".to_string()),

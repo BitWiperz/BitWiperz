@@ -25,20 +25,19 @@ async fn start_wiping(
     device_ids: Vec<String>,
     technique: String,
 ) -> Result<String, String> {
-    let technique = match technique.as_str() {
-        "ATA Secure Erase" => WipingTechnique::AtaSecureErase,
-        "Crypto Erase" => WipingTechnique::CryptoErase,
-        "DoD 3-Pass" => WipingTechnique::MultipassDoD3,
-        "DoD 7-Pass" => WipingTechnique::MultipassDoD7,
-        "Gutmann 35-Pass" => WipingTechnique::MultipassGutmann,
-        "Block Erase" => WipingTechnique::BlockErase,
-        _ => return Err("Unknown wiping technique".to_string()),
-    };
+    eprintln!("=== START_WIPING COMMAND CALLED ===");
+    eprintln!("Device IDs: {:?}", device_ids);
+    eprintln!("Technique: {}", technique);
+    
+    let technique = WipingTechnique::from_str(&technique)
+        .ok_or_else(|| "Unknown wiping technique".to_string())?;
 
+    eprintln!("Starting wipe with orchestrator...");
     let operation_id = ORCHESTRATOR
         .start_wipe(Arc::new(app), device_ids, technique)
         .await;
 
+    eprintln!("Operation ID: {}", operation_id);
     Ok(operation_id)
 }
 

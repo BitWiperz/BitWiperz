@@ -3,6 +3,7 @@ use chrono::Utc;
 use std::sync::Arc;
 use tauri::Emitter;
 use tokio::process::Command;
+use tokio_util::sync::CancellationToken;
 use sha2::{Sha256, Digest};
 use std::fs::File;
 use std::io::Read;
@@ -13,6 +14,7 @@ pub async fn execute_ata_erase(
     app: Arc<tauri::AppHandle>,
     operation_id: String,
     device_id: String,
+    cancel_token: CancellationToken,
 ) -> WipingStatus {
     let start_time = Utc::now();
     let technique = crate::wiping::types::WipingTechnique::AtaSecureErase;
@@ -23,7 +25,7 @@ pub async fn execute_ata_erase(
             operation_id,
             device_id,
             technique,
-            result: WipingResult::Failed("Root privileges required".to_string()),
+            result: WipingResult::Failed,
             started_at: start_time,
             completed_at: Utc::now(),
             error_message: Some("Root privileges required for ATA secure erase".to_string()),
@@ -53,7 +55,7 @@ pub async fn execute_ata_erase(
             operation_id,
             device_id,
             technique,
-            result: WipingResult::Failed(e.clone()),
+            result: WipingResult::Failed,
             started_at: start_time,
             completed_at: Utc::now(),
             error_message: Some(e),
@@ -67,7 +69,7 @@ pub async fn execute_ata_erase(
             operation_id,
             device_id,
             technique,
-            result: WipingResult::Failed(e.clone()),
+            result: WipingResult::Failed,
             started_at: start_time,
             completed_at: Utc::now(),
             error_message: Some(e),
@@ -81,7 +83,7 @@ pub async fn execute_ata_erase(
             operation_id,
             device_id,
             technique,
-            result: WipingResult::Failed(e.clone()),
+            result: WipingResult::Failed,
             started_at: start_time,
             completed_at: Utc::now(),
             error_message: Some(e),
@@ -120,7 +122,7 @@ pub async fn execute_ata_erase(
                     operation_id,
                     device_id,
                     technique,
-                    result: WipingResult::Failed("Device does not support ATA secure erase".to_string()),
+                    result: WipingResult::Failed,
                     started_at: start_time,
                     completed_at: Utc::now(),
                     error_message: Some("ATA secure erase not supported on this device".to_string()),
@@ -133,7 +135,7 @@ pub async fn execute_ata_erase(
                 operation_id,
                 device_id,
                 technique,
-                result: WipingResult::Failed("Failed to query device security features".to_string()),
+                result: WipingResult::Failed,
                 started_at: start_time,
                 completed_at: Utc::now(),
                 error_message: Some("Could not determine ATA security support".to_string()),
@@ -173,7 +175,7 @@ pub async fn execute_ata_erase(
             operation_id,
             device_id,
             technique,
-            result: WipingResult::Failed(format!("Failed to set security password: {}", e)),
+            result: WipingResult::Failed,
             started_at: start_time,
             completed_at: Utc::now(),
             error_message: Some(format!("hdparm password set failed: {}", e)),
@@ -197,45 +199,108 @@ pub async fn execute_ata_erase(
         },
     );
 
+    // Check for cancellation before starting erase
+    if cancel_token.is_cancelled() {
+        return WipingStatus {
+            operation_id,
+            device_id,
+            technique,
+            result: WipingResult::Cancelled,
+            started_at: start_time,
+            completed_at: Utc::now(),
+            error_message: Some("Operation cancelled before erase started".to_string()),
+            verification_hash: None,
+        };
+    }
+
     // Use enhanced erase if supported, otherwise standard
-    let erase_result = Command::new("hdparm")
+    // Spawn as a child process so we can kill it on cancellation
+    let mut child = match Command::new("hdparm")
         .arg("--user-master")
         .arg("u")
         .arg("--security-erase-enhanced")
         .arg(password)
         .arg(&device_id)
-        .output()
-        .await;
-
-    let erase_output = match erase_result {
-        Ok(output) => output,
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+    {
+        Ok(child) => child,
         Err(e) => {
             return WipingStatus {
                 operation_id,
                 device_id,
                 technique,
-                result: WipingResult::Failed(format!("Erase command failed: {}", e)),
+                result: WipingResult::Failed,
                 started_at: start_time,
                 completed_at: Utc::now(),
-                error_message: Some(format!("hdparm erase execution failed: {}", e)),
+                error_message: Some(format!("Failed to spawn hdparm: {}", e)),
                 verification_hash: None,
             };
         }
     };
 
-    if !erase_output.status.success() {
-        let stderr = String::from_utf8_lossy(&erase_output.stderr);
-        return WipingStatus {
-            operation_id,
-            device_id,
-            technique,
-            result: WipingResult::Failed(format!("Erase command failed: {}", stderr)),
-            started_at: start_time,
-            completed_at: Utc::now(),
-            error_message: Some(format!("hdparm returned error: {}", stderr)),
-            verification_hash: None,
-        };
-    }
+    // Wait for the child process or cancellation
+    tokio::select! {
+        result = child.wait() => {
+            match result {
+                Ok(_status) if _status.success() => {
+                    // Process succeeded
+                    std::process::Output {
+                        status: _status,
+                        stdout: vec![],
+                        stderr: vec![],
+                    }
+                }
+                Ok(_status) => {
+                    // Process failed, try to get stderr
+                    let mut stderr = vec![];
+                    if let Some(mut stderr_pipe) = child.stderr.take() {
+                        use tokio::io::AsyncReadExt;
+                        let _ = stderr_pipe.read_to_end(&mut stderr).await;
+                    }
+                    
+                    return WipingStatus {
+                        operation_id,
+                        device_id,
+                        technique,
+                        result: WipingResult::Failed,
+                        started_at: start_time,
+                        completed_at: Utc::now(),
+                        error_message: Some(format!("hdparm returned error: {}", String::from_utf8_lossy(&stderr))),
+                        verification_hash: None,
+                    };
+                }
+                Err(e) => {
+                    return WipingStatus {
+                        operation_id,
+                        device_id,
+                        technique,
+                        result: WipingResult::Failed,
+                        started_at: start_time,
+                        completed_at: Utc::now(),
+                        error_message: Some(format!("hdparm erase execution failed: {}", e)),
+                        verification_hash: None,
+                    };
+                }
+            }
+        }
+        _ = cancel_token.cancelled() => {
+            // Kill the child process
+            let _ = child.kill().await;
+            
+            return WipingStatus {
+                operation_id,
+                device_id,
+                technique,
+                result: WipingResult::Cancelled,
+                started_at: start_time,
+                completed_at: Utc::now(),
+                error_message: Some("Operation cancelled during erase".to_string()),
+                verification_hash: None,
+            };
+        }
+    };
 
     // Phase 5: Wait and monitor (90%)
     emit_progress(

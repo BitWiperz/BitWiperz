@@ -4,40 +4,91 @@ import "./SelectDevices.css";
 import DevCard from "../components/DevCard";
 import ErasureMethod from "../components/ErasureMethod";
 import TopBar from "../components/TopBar";
-import WipingProgress, { WipingProgressData } from "../components/WipingProgress";
-import WipingStatus, { WipingStatusData } from "../components/WipingStatus";
+import WipingProgress from "../components/WipingProgress";
+import WipingStatus from "../components/WipingStatus";
 import ConfirmDialog from "../components/ConfirmDialog";
+import Toast from "../components/Toast";
+import { useWiping } from "../contexts/WipingContext";
 import {
   startWiping,
-  subscribeToProgress,
-  subscribeToStatus,
   stringToTechnique,
-  WipingTechnique,
   type DeviceInfo,
   WipingResultType,
 } from "../services/wipingService";
 import { driveService, type DriveInfo as DetectedDrive } from "../services/driveService";
 import { createCertificate, type ErasureMetadata } from "../services/certificateService";
 
-interface ActiveWipingOperation {
-  operationId: string;
-  deviceIds: string[];
-  technique: WipingTechnique;
-  startedAt: Date;
-  progress: Map<string, WipingProgressData>;
-  status: Map<string, WipingStatusData>;
+interface ToastNotification {
+  id: string;
+  message: string;
+  type: "error" | "success" | "warning";
+  deviceName?: string;
 }
 
 export default function SelectDevices() {
   const navigate = useNavigate();
+  const { activeOperation, setActiveOperation, isWiping } = useWiping();
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
   const [selectedDevices, setSelectedDevices] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [erasureMethod, setErasureMethod] = useState("dod-3-pass");
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
-  const [activeOperation, setActiveOperation] = useState<ActiveWipingOperation | null>(null);
   const [generatingCertificate, setGeneratingCertificate] = useState(false);
+  const [toasts, setToasts] = useState<ToastNotification[]>([]);
+
+  // Helper to show toast notification
+  const showToast = (message: string, type: "error" | "success" | "warning", deviceName?: string) => {
+    const id = `toast-${Date.now()}-${Math.random()}`;
+    setToasts((prev) => [...prev, { id, message, type, deviceName }]);
+  };
+
+  // Helper to dismiss toast
+  const dismissToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  // Check if all devices in operation have completed
+  const areAllDevicesComplete = () => {
+    if (!activeOperation) return false;
+    return activeOperation.deviceIds.every((deviceId) => {
+      return activeOperation.status.has(deviceId);
+    });
+  };
+
+  // Reset wiping operation and return to device selection
+  const handleResetOperation = () => {
+    setActiveOperation(null);
+    setSelectedDevices([]);
+    setError(null);
+  };
+
+  // Retry wiping for a specific device
+  const handleRetryDevice = async (deviceId: string) => {
+    if (!activeOperation) return;
+    
+    try {
+      // Start a new operation with just this device
+      const technique = activeOperation.technique;
+      const operationId = await startWiping([deviceId], technique);
+
+      setActiveOperation({
+        operationId,
+        deviceIds: [deviceId],
+        technique,
+        startedAt: new Date(),
+        progress: new Map(),
+        status: new Map(),
+      });
+
+      setError(null);
+    } catch (err) {
+      console.error("Error retrying wipe:", err);
+      const errorMessage = "Failed to retry wiping operation";
+      setError(errorMessage);
+      showToast(errorMessage, "error");
+    }
+  };
 
   // Load devices on component mount
   useEffect(() => {
@@ -73,38 +124,27 @@ export default function SelectDevices() {
     loadDevices();
   }, []);
 
-  // Subscribe to progress events
+  // Watch for failed wipes from context and show toasts
   useEffect(() => {
-    let unsubscribeProgress: (() => void) | null = null;
-    let unsubscribeStatus: (() => void) | null = null;
+    if (!activeOperation) return;
 
-    const setupListeners = async () => {
-      unsubscribeProgress = await subscribeToProgress((progress) => {
-        setActiveOperation((prev) => {
-          if (!prev) return null;
-          const newProgress = new Map(prev.progress);
-          newProgress.set(progress.device_id, progress);
-          return { ...prev, progress: newProgress };
-        });
-      });
-
-      unsubscribeStatus = await subscribeToStatus((status) => {
-        setActiveOperation((prev) => {
-          if (!prev) return null;
-          const newStatus = new Map(prev.status);
-          newStatus.set(status.device_id, status);
-          return { ...prev, status: newStatus };
-        });
-      });
-    };
-
-    setupListeners();
-
-    return () => {
-      unsubscribeProgress?.();
-      unsubscribeStatus?.();
-    };
-  }, []);
+    // Check for new failures
+    activeOperation.status.forEach((status) => {
+      if (status.result === "Failed") {
+        const device = devices.find((d) => d.id === status.device_id);
+        const deviceName = device ? device.name : status.device_id;
+        const errorMessage = status.error_message || "Unknown error occurred";
+        
+        // Only show toast once per device failure (check if toast already exists)
+        const alreadyShown = toasts.some(
+          (t) => t.deviceName === deviceName && t.message === errorMessage
+        );
+        if (!alreadyShown) {
+          showToast(errorMessage, "error", deviceName);
+        }
+      }
+    });
+  }, [activeOperation?.status]);
 
   const toggleDeviceSelection = (id: string) => {
     setSelectedDevices((prev) =>
@@ -138,7 +178,9 @@ export default function SelectDevices() {
       setError(null);
     } catch (err) {
       console.error("Error starting wipe:", err);
-      setError("Failed to start wiping operation");
+      const errorMessage = "Failed to start wiping operation";
+      setError(errorMessage);
+      showToast(errorMessage, "error");
     }
   };
 
@@ -207,8 +249,6 @@ export default function SelectDevices() {
     selectedDevices.includes(d.id)
   );
 
-  const isWiping = activeOperation !== null;
-
   return (
     <div className="page-container">
       <TopBar
@@ -243,6 +283,7 @@ export default function SelectDevices() {
                         handleGenerateCertificate(deviceId)
                       }
                       onViewReport={handleViewReport}
+                      onRetry={() => handleRetryDevice(deviceId)}
                       isGeneratingCertificate={generatingCertificate}
                     />
                   ) : (
@@ -250,11 +291,23 @@ export default function SelectDevices() {
                       device={device}
                       progress={progress || null}
                       isActive={!status}
+                      startedAt={activeOperation?.startedAt}
                     />
                   )}
                 </div>
               );
             })}
+            
+            {areAllDevicesComplete() && (
+              <div className="operation-complete-actions">
+                <button
+                  className="action-button primary"
+                  onClick={handleResetOperation}
+                >
+                  Start New Wipe
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <>
@@ -300,6 +353,19 @@ export default function SelectDevices() {
         onCancel={() => setIsConfirmDialogOpen(false)}
         isLoading={false}
       />
+
+      {/* Toast notifications */}
+      <div className="toast-container">
+        {toasts.map((toast) => (
+          <Toast
+            key={toast.id}
+            message={toast.message}
+            type={toast.type}
+            deviceName={toast.deviceName}
+            onClose={() => dismissToast(toast.id)}
+          />
+        ))}
+      </div>
     </div>
   );
 }

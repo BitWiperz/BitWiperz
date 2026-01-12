@@ -751,6 +751,7 @@ dependencies = [
  "tauri-plugin-http",
  "tauri-plugin-opener",
  "tokio",
+ "tokio-util",
  "uuid",
 ]
 

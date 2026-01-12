@@ -3,6 +3,7 @@ use chrono::Utc;
 use std::sync::Arc;
 use tauri::Emitter;
 use tokio::process::Command;
+use tokio_util::sync::CancellationToken;
 use sha2::{Sha256, Digest};
 use std::fs::File;
 use std::io::Read;
@@ -13,6 +14,7 @@ pub async fn execute_block_erase(
     app: Arc<tauri::AppHandle>,
     operation_id: String,
     device_id: String,
+    cancel_token: CancellationToken,
 ) -> WipingStatus {
     let start_time = Utc::now();
     let technique = crate::wiping::types::WipingTechnique::BlockErase;
@@ -23,7 +25,7 @@ pub async fn execute_block_erase(
             operation_id,
             device_id,
             technique,
-            result: WipingResult::Failed("Root privileges required".to_string()),
+            result: WipingResult::Failed,
             started_at: start_time,
             completed_at: Utc::now(),
             error_message: Some("Root privileges required for block erase".to_string()),
@@ -53,7 +55,7 @@ pub async fn execute_block_erase(
             operation_id,
             device_id,
             technique,
-            result: WipingResult::Failed(e.clone()),
+            result: WipingResult::Failed,
             started_at: start_time,
             completed_at: Utc::now(),
             error_message: Some(e),
@@ -67,7 +69,7 @@ pub async fn execute_block_erase(
             operation_id,
             device_id,
             technique,
-            result: WipingResult::Failed(e.clone()),
+            result: WipingResult::Failed,
             started_at: start_time,
             completed_at: Utc::now(),
             error_message: Some(e),
@@ -81,7 +83,7 @@ pub async fn execute_block_erase(
             operation_id,
             device_id,
             technique,
-            result: WipingResult::Failed(e.clone()),
+            result: WipingResult::Failed,
             started_at: start_time,
             completed_at: Utc::now(),
             error_message: Some(e),
@@ -112,7 +114,7 @@ pub async fn execute_block_erase(
                 operation_id,
                 device_id,
                 technique,
-                result: WipingResult::Failed(e.clone()),
+                result: WipingResult::Failed,
                 started_at: start_time,
                 completed_at: Utc::now(),
                 error_message: Some(e),
@@ -137,55 +139,111 @@ pub async fn execute_block_erase(
         },
     );
 
-    // Use blkdiscard to erase the entire device
-    let erase_result = Command::new("blkdiscard")
-        .arg(&device_id)
-        .output()
-        .await;
+    // Check for cancellation before starting
+    if cancel_token.is_cancelled() {
+        return WipingStatus {
+            operation_id,
+            device_id,
+            technique,
+            result: WipingResult::Cancelled,
+            started_at: start_time,
+            completed_at: Utc::now(),
+            error_message: Some("Operation cancelled before erase started".to_string()),
+            verification_hash: None,
+        };
+    }
 
-    match erase_result {
-        Ok(output) if output.status.success() => {
-            emit_progress(
-                &app,
-                WipingProgress {
-                    operation_id: operation_id.clone(),
-                    device_id: device_id.clone(),
-                    technique: technique.clone(),
-                    progress_percent: 90,
-                    current_pass: 1,
-                    total_passes: 1,
-                    bytes_processed: device_size,
-                    status_message: "Block erase completed".to_string(),
-                    timestamp: Utc::now(),
-                },
-            );
-        }
-        Ok(output) => {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return WipingStatus {
-                operation_id,
-                device_id,
-                technique,
-                result: WipingResult::Failed(format!("blkdiscard failed: {}", stderr)),
-                started_at: start_time,
-                completed_at: Utc::now(),
-                error_message: Some(format!("blkdiscard error: {}", stderr)),
-                verification_hash: None,
-            };
-        }
+    // Spawn blkdiscard as a child process
+    let mut child = match Command::new("blkdiscard")
+        .arg(&device_id)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+    {
+        Ok(child) => child,
         Err(e) => {
             return WipingStatus {
                 operation_id,
                 device_id,
                 technique,
-                result: WipingResult::Failed(format!("Failed to execute blkdiscard: {}", e)),
+                result: WipingResult::Failed,
                 started_at: start_time,
                 completed_at: Utc::now(),
-                error_message: Some(format!("Command execution failed: {}", e)),
+                error_message: Some(format!("Failed to spawn blkdiscard: {}", e)),
                 verification_hash: None,
             };
         }
-    }
+    };
+
+    // Wait for the child process or cancellation
+    tokio::select! {
+        result = child.wait() => {
+            match result {
+                Ok(status) if status.success() => {
+                    emit_progress(
+                        &app,
+                        WipingProgress {
+                            operation_id: operation_id.clone(),
+                            device_id: device_id.clone(),
+                            technique: technique.clone(),
+                            progress_percent: 90,
+                            current_pass: 1,
+                            total_passes: 1,
+                            bytes_processed: device_size,
+                            status_message: "Block erase completed".to_string(),
+                            timestamp: Utc::now(),
+                        },
+                    );
+                }
+                Ok(_status) => {
+                    // Process failed, try to get stderr
+                    let mut stderr = vec![];
+                    if let Some(mut stderr_pipe) = child.stderr.take() {
+                        use tokio::io::AsyncReadExt;
+                        let _ = stderr_pipe.read_to_end(&mut stderr).await;
+                    }
+                    
+                    return WipingStatus {
+                        operation_id,
+                        device_id,
+                        technique,
+                        result: WipingResult::Failed,
+                        started_at: start_time,
+                        completed_at: Utc::now(),
+                        error_message: Some(format!("blkdiscard error: {}", String::from_utf8_lossy(&stderr))),
+                        verification_hash: None,
+                    };
+                }
+                Err(e) => {
+                    return WipingStatus {
+                        operation_id,
+                        device_id,
+                        technique,
+                        result: WipingResult::Failed,
+                        started_at: start_time,
+                        completed_at: Utc::now(),
+                        error_message: Some(format!("Command execution failed: {}", e)),
+                        verification_hash: None,
+                    };
+                }
+            }
+        }
+        _ = cancel_token.cancelled() => {
+            // Kill the child process
+            let _ = child.kill().await;
+            
+            return WipingStatus {
+                operation_id,
+                device_id,
+                technique,
+                result: WipingResult::Cancelled,
+                started_at: start_time,
+                completed_at: Utc::now(),
+                error_message: Some("Operation cancelled during erase".to_string()),
+                verification_hash: None,
+            };
+        }
+    };
 
     // Phase 4: Verify (100%)
     emit_progress(

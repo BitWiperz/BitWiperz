@@ -8,3 +8,4 @@ export { default as TopBar } from "./TopBar";
 export { default as WipingProgress } from "./WipingProgress";
 export { default as WipingStatus } from "./WipingStatus";
 export { default as ConfirmDialog } from "./ConfirmDialog";
+export { default as Toast } from "./Toast";

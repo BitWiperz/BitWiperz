@@ -1,7 +1,7 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer, Deserializer};
 use chrono::{DateTime, Utc};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum WipingTechnique {
     AtaSecureErase,
     CryptoErase,
@@ -21,6 +21,38 @@ impl WipingTechnique {
             WipingTechnique::MultipassGutmann => "Gutmann 35-Pass",
             WipingTechnique::BlockErase => "Block Erase",
         }
+    }
+    
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "ATA Secure Erase" => Some(WipingTechnique::AtaSecureErase),
+            "Crypto Erase" => Some(WipingTechnique::CryptoErase),
+            "DoD 3-Pass" => Some(WipingTechnique::MultipassDoD3),
+            "DoD 7-Pass" => Some(WipingTechnique::MultipassDoD7),
+            "Gutmann 35-Pass" => Some(WipingTechnique::MultipassGutmann),
+            "Block Erase" => Some(WipingTechnique::BlockErase),
+            _ => None,
+        }
+    }
+}
+
+impl Serialize for WipingTechnique {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for WipingTechnique {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Self::from_str(&s)
+            .ok_or_else(|| serde::de::Error::custom(format!("Unknown technique: {}", s)))
     }
 }
 
@@ -47,10 +79,11 @@ pub struct WipingProgress {
     pub timestamp: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "PascalCase")]
 pub enum WipingResult {
     Success,
-    Failed(String),
+    Failed,
     Cancelled,
 }
 
