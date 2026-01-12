@@ -9,15 +9,7 @@ import { WipingProvider } from "./contexts/WipingContext";
 import "./App.css";
 // Optional: listen for Tauri window close to clear auth
 // If Tauri is not available, this will be a no-op
-let appWindow: any;
-try {
-  // Lazy import to avoid bundling errors in non-tauri environments
-  import("@tauri-apps/api/window").then((module) => {
-    appWindow = module.appWindow;
-  }).catch(() => {
-    // ignore if Tauri is not available
-  });
-} catch {}
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = authService.isAuthenticated();
@@ -28,14 +20,13 @@ function App() {
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     (async () => {
-      if (appWindow && appWindow.onCloseRequested) {
-        try {
-          unlisten = await appWindow.onCloseRequested(async () => {
-            await authService.logout();
-          });
-        } catch {
-          // ignore
-        }
+      try {
+        const appWindow = getCurrentWindow();
+        unlisten = await appWindow.onCloseRequested(async () => {
+          await authService.logout();
+        });
+      } catch {
+        // ignore if Tauri is not available
       }
     })();
     return () => {

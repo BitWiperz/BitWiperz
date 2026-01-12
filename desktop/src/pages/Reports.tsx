@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Certificate, listCertificates, downloadCertificatePdf, previewCertificatePdf, issueAndDownloadCertificate, USE_MOCK_DATA } from '../services/certificateService';
 import './Reports.css';
 
