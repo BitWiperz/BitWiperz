@@ -22,8 +22,15 @@ function App() {
     (async () => {
       try {
         const appWindow = getCurrentWindow();
-        unlisten = await appWindow.onCloseRequested(async () => {
+        unlisten = await appWindow.onCloseRequested(async (event) => {
+          // Prevent default close to allow cleanup
+          event.preventDefault();
+          
+          // Perform cleanup
           await authService.logout();
+          
+          // Now allow the window to close
+          await appWindow.close();
         });
       } catch {
         // ignore if Tauri is not available
