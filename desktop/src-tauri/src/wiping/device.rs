@@ -1,4 +1,4 @@
-use crate::wiping::types::DeviceInfo;
+use crate::wiping::types::{DeviceInfo, DeviceType};
 use std::fs;
 use std::path::Path;
 
@@ -30,6 +30,85 @@ pub fn list_devices() -> Vec<DeviceInfo> {
     // If no devices found, return empty list (user will see "No devices detected")
     // This is better than showing fake data
     devices
+}
+
+/// Determine the device type from device path
+pub fn get_device_type(device_id: &str) -> DeviceType {
+    // Extract device name from path (e.g., /dev/nvme0n1 -> nvme0n1)
+    let device_name = device_id.trim_start_matches("/dev/");
+    
+    if device_name.starts_with("nvme") {
+        DeviceType::Nvme
+    } else if device_name.starts_with("sd") {
+        // Check if it's an SSD or HDD by looking at rotational flag
+        let rotational_path = format!("/sys/block/{}/queue/rotational", device_name);
+        if let Ok(content) = fs::read_to_string(&rotational_path) {
+            if content.trim() == "0" {
+                return DeviceType::Sata; // SSD
+            } else {
+                return DeviceType::Hdd; // Rotational HDD
+            }
+        }
+        DeviceType::Sata // Default to SATA if can't determine
+    } else if device_name.starts_with("vd") || device_name.starts_with("xvd") {
+        // Virtual devices
+        DeviceType::Unknown
+    } else if device_name.starts_with("mmc") {
+        // MMC/SD cards - treat as SATA-like
+        DeviceType::Sata
+    } else {
+        DeviceType::Unknown
+    }
+}
+
+/// Check if a device supports TRIM/discard operations
+pub fn supports_discard(device_id: &str) -> bool {
+    let device_name = device_id.trim_start_matches("/dev/");
+    
+    // Check discard_granularity - if > 0, device supports discard
+    let discard_path = format!("/sys/block/{}/queue/discard_granularity", device_name);
+    if let Ok(content) = fs::read_to_string(&discard_path) {
+        if let Ok(granularity) = content.trim().parse::<u64>() {
+            return granularity > 0;
+        }
+    }
+    
+    false
+}
+
+/// Check if a device is an NVMe device
+pub fn is_nvme_device(device_id: &str) -> bool {
+    matches!(get_device_type(device_id), DeviceType::Nvme)
+}
+
+/// Check if a device is a rotational HDD
+pub fn is_rotational(device_id: &str) -> bool {
+    matches!(get_device_type(device_id), DeviceType::Hdd)
+}
+
+/// Check if ATA secure erase is supported on the device
+pub async fn supports_ata_secure_erase(device_id: &str) -> bool {
+    use tokio::process::Command;
+    
+    // Only SATA devices support ATA secure erase
+    if !matches!(get_device_type(device_id), DeviceType::Sata) {
+        return false;
+    }
+    
+    // Check hdparm security info
+    let output = Command::new("hdparm")
+        .arg("-I")
+        .arg(device_id)
+        .output()
+        .await;
+    
+    match output {
+        Ok(output) if output.status.success() => {
+            let info = String::from_utf8_lossy(&output.stdout);
+            info.contains("Security") && !info.contains("not supported")
+        }
+        _ => false,
+    }
 }
 
 /// Read device information from /sys/block/{device_name}

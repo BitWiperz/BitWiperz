@@ -105,6 +105,44 @@ async fn open_file_with_system(path: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Validate that a wiping technique is compatible with a device
+/// Returns Ok(()) if compatible, Err(reason) if not
+#[tauri::command]
+fn validate_technique(device_id: String, technique: String) -> Result<(), String> {
+    let technique = WipingTechnique::from_str(&technique)
+        .ok_or_else(|| format!("Unknown wiping technique: {}", technique))?;
+    
+    wiping::validate_technique_for_device(&technique, &device_id)
+}
+
+/// Get compatible wiping techniques for a device
+#[tauri::command]
+fn get_compatible_techniques(device_id: String) -> Vec<String> {
+    use wiping::types::DeviceType;
+    use wiping::device::get_device_type;
+    
+    let device_type = get_device_type(&device_id);
+    
+    let all_techniques = vec![
+        WipingTechnique::AtaSecureErase,
+        WipingTechnique::CryptoErase,
+        WipingTechnique::MultipassDoD3,
+        WipingTechnique::MultipassDoD7,
+        WipingTechnique::MultipassGutmann,
+        WipingTechnique::BlockErase,
+        WipingTechnique::NvmeSecureErase,
+        WipingTechnique::NvmeFormat,
+        WipingTechnique::RandomSinglePass,
+        WipingTechnique::ZeroFill,
+    ];
+    
+    all_techniques
+        .into_iter()
+        .filter(|t| t.is_compatible_with(&device_type))
+        .map(|t| t.as_str().to_string())
+        .collect()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -116,6 +154,8 @@ pub fn run() {
             start_wiping,
             cancel_wiping,
             get_wiping_status,
+            validate_technique,
+            get_compatible_techniques,
             write_temp_pdf,
             open_file_with_system,
             drive_detection::detect_drives,

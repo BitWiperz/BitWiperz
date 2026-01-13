@@ -12,6 +12,7 @@ import { useWiping } from "../contexts/WipingContext";
 import {
   startWiping,
   stringToTechnique,
+  validateTechnique,
   type DeviceInfo,
   WipingResultType,
 } from "../services/wipingService";
@@ -152,11 +153,33 @@ export default function SelectDevices() {
     );
   };
 
-  const handleEraseClick = () => {
+  const handleEraseClick = async () => {
     if (selectedDevices.length === 0) {
       setError("Please select at least one device to wipe");
       return;
     }
+
+    // Validate technique compatibility with all selected devices
+    const technique = stringToTechnique(erasureMethod);
+    const incompatibleDevices: string[] = [];
+
+    for (const deviceId of selectedDevices) {
+      const error = await validateTechnique(deviceId, technique);
+      if (error) {
+        const device = devices.find((d) => d.id === deviceId);
+        const deviceName = device ? device.name : deviceId;
+        incompatibleDevices.push(deviceName);
+        showToast(error, "warning", deviceName);
+      }
+    }
+
+    if (incompatibleDevices.length > 0) {
+      setError(
+        `Selected technique is not compatible with: ${incompatibleDevices.join(", ")}. Please choose a different technique or deselect incompatible devices.`
+      );
+      return;
+    }
+
     setIsConfirmDialogOpen(true);
   };
 

@@ -3,6 +3,8 @@ pub mod block_erase;
 pub mod crypto_erase;
 pub mod device;
 pub mod multipass;
+pub mod nvme_erase;
+pub mod single_pass;
 pub mod types;
 
 use std::collections::HashMap;
@@ -13,7 +15,23 @@ use uuid::Uuid;
 use once_cell::sync::Lazy;
 use tauri::Emitter;
 
-use crate::wiping::types::{WipingStatus, WipingTechnique};
+use crate::wiping::types::{WipingResult, WipingStatus, WipingTechnique};
+use crate::wiping::device::get_device_type;
+
+/// Validate that a technique is compatible with a device
+/// Returns Ok(()) if compatible, Err(message) if not
+pub fn validate_technique_for_device(
+    technique: &WipingTechnique,
+    device_id: &str,
+) -> Result<(), String> {
+    let device_type = get_device_type(device_id);
+    
+    if let Some(reason) = technique.incompatibility_reason(&device_type) {
+        Err(reason)
+    } else {
+        Ok(())
+    }
+}
 
 /// Orchestrator for managing disk wiping operations
 pub struct WipingOrchestrator {
@@ -132,6 +150,21 @@ async fn execute_wipe_for_device(
     eprintln!("Operation ID: {}", operation_id);
     eprintln!("Device ID: {}", device_id);
     eprintln!("Technique: {:?}", technique);
+
+    // Validate technique compatibility with device before starting
+    if let Err(reason) = validate_technique_for_device(&technique, &device_id) {
+        eprintln!("Technique incompatible with device: {}", reason);
+        return WipingStatus {
+            operation_id,
+            device_id,
+            technique,
+            result: WipingResult::Failed,
+            started_at: chrono::Utc::now(),
+            completed_at: chrono::Utc::now(),
+            error_message: Some(reason),
+            verification_hash: None,
+        };
+    }
     
     match technique {
         WipingTechnique::AtaSecureErase => {
@@ -176,7 +209,24 @@ async fn execute_wipe_for_device(
             .await
         }
         WipingTechnique::BlockErase => {
+            eprintln!("Calling block_erase::execute_block_erase");
             block_erase::execute_block_erase(app, operation_id, device_id, cancel_token).await
+        }
+        WipingTechnique::NvmeSecureErase => {
+            eprintln!("Calling nvme_erase::execute_nvme_secure_erase");
+            nvme_erase::execute_nvme_secure_erase(app, operation_id, device_id, cancel_token).await
+        }
+        WipingTechnique::NvmeFormat => {
+            eprintln!("Calling nvme_erase::execute_nvme_format");
+            nvme_erase::execute_nvme_format(app, operation_id, device_id, cancel_token).await
+        }
+        WipingTechnique::RandomSinglePass => {
+            eprintln!("Calling single_pass::execute_random_single_pass");
+            single_pass::execute_random_single_pass(app, operation_id, device_id, cancel_token).await
+        }
+        WipingTechnique::ZeroFill => {
+            eprintln!("Calling single_pass::execute_zero_fill");
+            single_pass::execute_zero_fill(app, operation_id, device_id, cancel_token).await
         }
     }
 }
