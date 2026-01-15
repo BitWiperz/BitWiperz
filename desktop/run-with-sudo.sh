@@ -20,8 +20,20 @@ echo "Starting Vite dev server..."
 pnpm dev &
 VITE_PID=$!
 
-# Wait for vite to be ready
-sleep 3
+# Wait for vite to be ready (check if port 1420 is listening)
+echo "Waiting for Vite dev server to be ready..."
+for i in {1..30}; do
+    if curl -s http://localhost:1420 > /dev/null 2>&1; then
+        echo "Vite dev server is ready!"
+        break
+    fi
+    if [ $i -eq 30 ]; then
+        echo "Timeout waiting for Vite dev server"
+        kill $VITE_PID 2>/dev/null
+        exit 1
+    fi
+    sleep 1
+done
 
 # Build and run Tauri with sudo
 echo "Building Tauri app..."
@@ -31,7 +43,16 @@ cargo build 2>&1 | grep -E "(Compiling|Finished|error|warning:.*error)" || true
 if [ $? -eq 0 ]; then
     echo "Running Tauri app with sudo..."
     # Run the binary with sudo, preserving display environment
-    sudo -E LD_LIBRARY_PATH= ./target/debug/desktop
+    # Clear LD_LIBRARY_PATH and LD_PRELOAD to prevent snap library conflicts
+    # Also unset any snap-related environment variables that might interfere
+    sudo env \
+        DISPLAY="$DISPLAY" \
+        XAUTHORITY="$XAUTHORITY" \
+        XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+        HOME="$HOME" \
+        LD_LIBRARY_PATH="" \
+        LD_PRELOAD="" \
+        ./target/debug/desktop
 else
     echo "Build failed!"
     kill $VITE_PID 2>/dev/null
