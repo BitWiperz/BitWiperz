@@ -26,11 +26,13 @@ function App() {
           // Prevent default close to allow cleanup
           event.preventDefault();
           
-          // Perform cleanup
-          await authService.logout();
+          // Perform cleanup (don't await to avoid blocking)
+          authService.logout().catch(() => {});
           
-          // Now allow the window to close
-          await appWindow.close();
+          // Close the window immediately
+          setTimeout(() => {
+            appWindow.close().catch(() => {});
+          }, 100);
         });
       } catch {
         // ignore if Tauri is not available
