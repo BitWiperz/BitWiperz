@@ -17,6 +17,11 @@ export enum WipingTechnique {
   MultipassDoD7 = "DoD 7-Pass",
   MultipassGutmann = "Gutmann 35-Pass",
   BlockErase = "Block Erase",
+  // New techniques
+  NvmeSecureErase = "NVMe Secure Erase",
+  NvmeFormat = "NVMe Format",
+  RandomSinglePass = "Random Single Pass",
+  ZeroFill = "Zero Fill",
 }
 
 export interface WipingProgress {
@@ -175,7 +180,80 @@ export function stringToTechnique(value: string): WipingTechnique {
       return WipingTechnique.MultipassGutmann;
     case "block-erase":
       return WipingTechnique.BlockErase;
+    case "nvme-secure-erase":
+      return WipingTechnique.NvmeSecureErase;
+    case "nvme-format":
+      return WipingTechnique.NvmeFormat;
+    case "random-single-pass":
+      return WipingTechnique.RandomSinglePass;
+    case "zero-fill":
+      return WipingTechnique.ZeroFill;
     default:
       return WipingTechnique.MultipassDoD3;
+  }
+}
+
+/**
+ * Validate that a technique is compatible with a device
+ * Returns null if compatible, error message if not
+ */
+export async function validateTechnique(
+  deviceId: string,
+  technique: WipingTechnique
+): Promise<string | null> {
+  try {
+    await invoke<void>("validate_technique", {
+      deviceId,
+      technique: technique.toString(),
+    });
+    return null;
+  } catch (error) {
+    return error as string;
+  }
+}
+
+/**
+ * Get list of compatible techniques for a device
+ */
+export async function getCompatibleTechniques(
+  deviceId: string
+): Promise<WipingTechnique[]> {
+  try {
+    const techniques = await invoke<string[]>("get_compatible_techniques", {
+      deviceId,
+    });
+    return techniques
+      .map((t) => {
+        // Convert technique string to enum
+        switch (t) {
+          case "ATA Secure Erase":
+            return WipingTechnique.AtaSecureErase;
+          case "Crypto Erase":
+            return WipingTechnique.CryptoErase;
+          case "DoD 3-Pass":
+            return WipingTechnique.MultipassDoD3;
+          case "DoD 7-Pass":
+            return WipingTechnique.MultipassDoD7;
+          case "Gutmann 35-Pass":
+            return WipingTechnique.MultipassGutmann;
+          case "Block Erase":
+            return WipingTechnique.BlockErase;
+          case "NVMe Secure Erase":
+            return WipingTechnique.NvmeSecureErase;
+          case "NVMe Format":
+            return WipingTechnique.NvmeFormat;
+          case "Random Single Pass":
+            return WipingTechnique.RandomSinglePass;
+          case "Zero Fill":
+            return WipingTechnique.ZeroFill;
+          default:
+            return null;
+        }
+      })
+      .filter((t): t is WipingTechnique => t !== null);
+  } catch (error) {
+    console.error("Failed to get compatible techniques:", error);
+    // Return all techniques if we can't determine compatibility
+    return Object.values(WipingTechnique);
   }
 }

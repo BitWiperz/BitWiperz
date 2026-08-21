@@ -33,6 +33,45 @@
   gap: 20px;
 }
 
+.device-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.device-list-header h2 {
+  font-family: 'Inter', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: #222222;
+  margin: 0;
+}
+
+.refresh-button {
+  padding: 8px 16px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-family: 'Open Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.refresh-button:hover:not(:disabled) {
+  background-color: #0056b3;
+}
+
+.refresh-button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
 .device-list {
   display: flex;
   flex-direction: column;
@@ -46,3 +85,127 @@
   border-top: 1px solid #e0e0e0;
 }
 
+.loading-message {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex: 1;
+  min-height: 200px;
+  font-family: 'Open Sans', sans-serif;
+  font-size: 16px;
+  color: #666666;
+}
+
+.loading-message p {
+  margin: 0;
+}
+
+.no-drives-message {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  flex: 1;
+  min-height: 200px;
+  text-align: center;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.no-drives-message p {
+  font-family: 'Open Sans', sans-serif;
+  font-size: 16px;
+  color: #666666;
+  margin: 0 0 15px 0;
+}
+
+.no-drives-message button {
+  padding: 10px 20px;
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-family: 'Open Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.no-drives-message button:hover {
+  background-color: #218838;
+}
+
+.error-message {
+  background-color: #ffe0e0;
+  border: 1px solid #ff6b6b;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 15px;
+}
+
+.error-message p {
+  font-family: 'Open Sans', sans-serif;
+  font-size: 14px;
+  color: #d32f2f;
+  margin: 0 0 10px 0;
+}
+
+.error-message button {
+  padding: 8px 16px;
+  background-color: #d32f2f;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-family: 'Open Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.error-message button:hover {
+  background-color: #b71c1c;
+}
+.operation-complete-actions {
+  margin-top: 24px;
+  padding: 20px;
+  text-align: center;
+  border-top: 2px solid #f0f0f0;
+}
+
+.operation-complete-actions .action-button {
+  padding: 12px 32px;
+  font-size: 16px;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: 'Inter', sans-serif;
+}
+
+.operation-complete-actions .action-button.primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.operation-complete-actions .action-button.primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.operation-complete-actions .action-button.primary:active {
+  transform: translateY(0);
+}
+
+.toast-container {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}

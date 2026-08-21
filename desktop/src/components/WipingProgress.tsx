@@ -21,25 +21,27 @@ interface WipingProgressProps {
   };
   progress: WipingProgressData | null;
   isActive: boolean;
+  startedAt?: Date; // When the wiping operation started
 }
 
 export default function WipingProgress({
   device,
   progress,
   isActive,
+  startedAt,
 }: WipingProgressProps) {
   const [elapsedTime, setElapsedTime] = useState(0);
-  const [startTime] = useState(Date.now());
 
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive || !startedAt) return;
 
+    // Calculate elapsed time based on when the operation actually started
     const interval = setInterval(() => {
-      setElapsedTime(Math.floor((Date.now() - startTime) / 1000));
+      setElapsedTime(Math.floor((Date.now() - startedAt.getTime()) / 1000));
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isActive, startTime]);
+  }, [isActive, startedAt]);
 
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return "0 Bytes";

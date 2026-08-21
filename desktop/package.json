@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:dev:no-snap": "bash ./run-tauri-no-snap.sh",
+    "tauri:dev:force-pthread": "bash ./run-tauri-force-system-pthread.sh"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

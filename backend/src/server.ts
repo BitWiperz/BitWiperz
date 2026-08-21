@@ -5,7 +5,7 @@ import { initDb } from './db/supabase.js';
 
 dotenv.config();
 
-const PORT = process.env.PORT ?? '3000';
+const PORT = process.env.PORT || '3000';
 
 function validateEnv(): void {
 	const missing: string[] = [];

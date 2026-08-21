@@ -12,7 +12,7 @@ const app: Application = express();
 
 // Middleware
 // CORS: restrict origins via env (comma-separated). Default to localhost dev.
-const allowedOrigins = (process.env.CORS_ORIGIN ?? 'http://localhost:1420').split(',').map((s) => s.trim()).filter(Boolean);
+const allowedOrigins = (process.env.CORS_ORIGIN ?? 'http://localhost:1420,http://127.0.0.1:1420').split(',').map((s) => s.trim()).filter(Boolean);
 app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json({ limit: '1mb' }));
 

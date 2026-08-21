@@ -19,12 +19,22 @@ const DEFAULT_OPTIONS: ErasureOption[] = [
   {
     id: "ata-secure-erase",
     label: "ATA SECURE ERASE",
-    description: "Hardware-level ATA command, ~30-60 seconds",
+    description: "Hardware-level ATA command for SATA drives ~30-60 seconds",
   },
   {
     id: "crypto-erase",
     label: "CRYPTO ERASE",
     description: "Self-encrypting drives, fastest method ~10-20 seconds",
+  },
+  {
+    id: "nvme-secure-erase",
+    label: "NVME SECURE ERASE",
+    description: "NVMe sanitize command, hardware-level secure erase ~30-60 seconds",
+  },
+  {
+    id: "nvme-format",
+    label: "NVME FORMAT",
+    description: "NVMe format with secure erase for NVMe drives ~20-40 seconds",
   },
   {
     id: "dod-3-pass",
@@ -40,6 +50,16 @@ const DEFAULT_OPTIONS: ErasureOption[] = [
     id: "gutmann-35-pass",
     label: "GUTMANN 35-PASS",
     description: "Maximum security (35 patterns) ~15-30 minutes",
+  },
+  {
+    id: "random-single-pass",
+    label: "RANDOM SINGLE PASS",
+    description: "Single pass with random data, fast general-purpose wipe ~1-3 minutes",
+  },
+  {
+    id: "zero-fill",
+    label: "ZERO FILL",
+    description: "Single pass with zeros, fastest software wipe ~1-2 minutes",
   },
   {
     id: "block-erase",

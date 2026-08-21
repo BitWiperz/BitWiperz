@@ -1,4 +1,5 @@
 import { useNavigate, useLocation } from "react-router-dom";
+import { useWiping } from "../contexts/WipingContext";
 import "./Navbar.css";
 
 interface NavItem {
@@ -20,6 +21,18 @@ export default function Navbar({
 }: NavbarProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { isWiping } = useWiping();
+
+  const handleNavigation = (path: string) => {
+    // Warn if navigating away from devices page while wiping
+    if (isWiping && location.pathname === "/devices" && path !== "/devices") {
+      const confirmed = window.confirm(
+        "A wiping operation is currently in progress. If you navigate away, you can return to this page to see the progress. Continue?"
+      );
+      if (!confirmed) return;
+    }
+    navigate(path);
+  };
 
   return (
     <nav className="navbar">
@@ -28,7 +41,7 @@ export default function Navbar({
           <button
             key={item.id}
             className={`nav-item ${location.pathname === item.path ? "active" : ""}`}
-            onClick={() => navigate(item.path)}
+            onClick={() => handleNavigation(item.path)}
           >
             <span className="nav-item-number">{item.id}</span>
             <span className="nav-item-label">{item.label}</span>

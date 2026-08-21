@@ -5,18 +5,11 @@ import { SelectDevices, FieldOptions, Reports, Login, Register } from "./pages";
 import Welcome from "./pages/Welcome";
 import NetworkSetup from "./pages/NetworkSetup";
 import { authService } from "./services/authService";
+import { WipingProvider } from "./contexts/WipingContext";
 import "./App.css";
 // Optional: listen for Tauri window close to clear auth
 // If Tauri is not available, this will be a no-op
-let appWindow: any;
-try {
-  // Lazy import to avoid bundling errors in non-tauri environments
-  import("@tauri-apps/api/window").then((module) => {
-    appWindow = module.appWindow;
-  }).catch(() => {
-    // ignore if Tauri is not available
-  });
-} catch {}
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = authService.isAuthenticated();
@@ -27,14 +20,22 @@ function App() {
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     (async () => {
-      if (appWindow && appWindow.onCloseRequested) {
-        try {
-          unlisten = await appWindow.onCloseRequested(async () => {
-            await authService.logout();
-          });
-        } catch {
-          // ignore
-        }
+      try {
+        const appWindow = getCurrentWindow();
+        unlisten = await appWindow.onCloseRequested(async (event) => {
+          // Prevent default close to allow cleanup
+          event.preventDefault();
+          
+          // Perform cleanup (don't await to avoid blocking)
+          authService.logout().catch(() => {});
+          
+          // Close the window immediately
+          setTimeout(() => {
+            appWindow.close().catch(() => {});
+          }, 100);
+        });
+      } catch {
+        // ignore if Tauri is not available
       }
     })();
     return () => {
@@ -44,32 +45,34 @@ function App() {
     };
   }, []);
   return (
-    <Router>
-      <Routes>
-        <Route path="/welcome" element={<Welcome />} />
-        <Route path="/network-setup" element={<NetworkSetup />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        
-        <Route path="/*" element={
-          <ProtectedRoute>
-            <div className="app-container">
-              <Sidebar />
-              <main className="main-content">
-                <Routes>
-                  <Route path="/devices" element={<SelectDevices />} />
-                  <Route path="/options" element={<FieldOptions />} />
-                  <Route path="/reports" element={<Reports />} />
-                  <Route path="/" element={<Navigate to="/devices" replace />} />
-                </Routes>
-              </main>
-            </div>
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/" element={<Navigate to="/welcome" replace />} />
-      </Routes>
-    </Router>
+    <WipingProvider>
+      <Router>
+        <Routes>
+          <Route path="/welcome" element={<Welcome />} />
+          <Route path="/network-setup" element={<NetworkSetup />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          
+          <Route path="/*" element={
+            <ProtectedRoute>
+              <div className="app-container">
+                <Sidebar />
+                <main className="main-content">
+                  <Routes>
+                    <Route path="/devices" element={<SelectDevices />} />
+                    <Route path="/options" element={<FieldOptions />} />
+                    <Route path="/reports" element={<Reports />} />
+                    <Route path="/" element={<Navigate to="/devices" replace />} />
+                  </Routes>
+                </main>
+              </div>
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/" element={<Navigate to="/welcome" replace />} />
+        </Routes>
+      </Router>
+    </WipingProvider>
   );
 }
 
