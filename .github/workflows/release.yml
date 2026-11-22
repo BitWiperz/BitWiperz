@@ -5,6 +5,11 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release Tag (e.g. v0.1.1)'
+        required: false
+        default: 'v0.1.1'
 
 permissions:
   contents: write
@@ -16,6 +21,14 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Determine tag name
+        run: |
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            echo "TAG_NAME=${{ github.event.inputs.tag }}" >> $GITHUB_ENV
+          else
+            echo "TAG_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
+          fi
 
       - name: Install system dependencies
         run: |
@@ -30,7 +43,8 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             libsoup-3.0-dev \
-            libfuse2
+            libfuse2 \
+            squashfs-tools
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -45,6 +59,7 @@ jobs:
         with:
           node-version: 20
           cache: 'pnpm'
+          cache-dependency-path: 'desktop/pnpm-lock.yaml'
 
       - name: Install desktop dependencies
         run: |
@@ -65,8 +80,8 @@ jobs:
           VITE_API_URL: https://bitwiperz.onrender.com/api
         with:
           projectPath: ./desktop
-          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v0.1.1' }}
-          releaseName: 'BitWiperz ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v0.1.1' }}'
+          tagName: ${{ env.TAG_NAME }}
+          releaseName: 'BitWiperz ${{ env.TAG_NAME }}'
           releaseBody: 'Automated release of BitWiperz Data Sanitization Platform. Download the .deb package or .AppImage below.'
           releaseDraft: false
           prerelease: false
