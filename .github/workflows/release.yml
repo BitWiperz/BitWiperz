@@ -59,12 +59,10 @@ jobs:
         with:
           node-version: 20
           cache: 'pnpm'
-          cache-dependency-path: 'desktop/pnpm-lock.yaml'
+          cache-dependency-path: 'pnpm-lock.yaml'
 
-      - name: Install desktop dependencies
-        run: |
-          cd desktop
-          pnpm install
+      - name: Install dependencies
+        run: pnpm install
 
       - name: Build frontend
         run: |
