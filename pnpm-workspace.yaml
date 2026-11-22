@@ -1,7 +1,7 @@
 packages:
   - backend
   - desktop
-
 onlyBuiltDependencies:
   - bcrypt
+  - sqlite3
   - esbuild
