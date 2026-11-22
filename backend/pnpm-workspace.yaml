@@ -1,4 +1,0 @@
-onlyBuiltDependencies:
-  - bcrypt
-  - sqlite3
-  - esbuild
