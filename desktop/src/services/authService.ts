@@ -1,9 +1,8 @@
 const API_BASE_URL_RAW = import.meta.env.VITE_API_URL as string | undefined;
+const API_BASE_URL = API_BASE_URL_RAW || 'https://bitwiperz.onrender.com/api';
 if (!API_BASE_URL_RAW) {
-  console.error('[config] VITE_API_URL is not set. Please define it in your .env to point to the backend API.');
-  throw new Error('Missing VITE_API_URL environment variable');
+  console.warn('[config] VITE_API_URL not set in env; falling back to:', API_BASE_URL);
 }
-const API_BASE_URL = API_BASE_URL_RAW;
 
 function clearAuthAndRedirect() {
   try {
